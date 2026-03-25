@@ -1,3 +1,5 @@
+**County Childhood Vaccination Uptake: Social Determinants, Broadband
+Access, and Internet Influence**
 ### Preliminary Project Proposal
 
 #### Team roles
@@ -5,11 +7,6 @@
 **Team Lead:** Geoffrey Bruder  
 **Recorder:** Geoffrey Bruder  
 **Spokesperson:** Geoffrey Bruder
-
-#### Project title
-
-**County Childhood Vaccination Uptake: Social Determinants, Broadband
-Access, and Internet Influence**
 
 #### Background and question
 
