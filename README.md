@@ -25,11 +25,6 @@ Integrating SDOH, broadband availability, and internet search behavior
 produces a richer signal than SDOH alone and supports targeted
 interventions.
 
-> **Quoted guidance from the course materials:** “Begin your plan by
-> clearly defining what question you are trying to answer. This question
-> should specify both your target variable (the main outcome you are
-> trying to predict or explain) and the context in which it applies.”
-
 #### Stakeholder
 
 **Primary stakeholder:** State Health Board (or county public‑health
