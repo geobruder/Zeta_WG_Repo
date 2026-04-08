@@ -1,0 +1,17 @@
+# Data and environment
+data_raw/
+data_clean/
+*.csv
+*.sqlite
+.env
+.envrc
+# Python
+__pycache__/
+*.pyc
+venv/
+.env/
+.ipynb_checkpoints/
+# Jupyter outputs
+*.ipynb
+# OS
+.DS_Store

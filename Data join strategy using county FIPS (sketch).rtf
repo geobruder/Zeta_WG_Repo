@@ -1,0 +1,103 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\froman\fcharset0 Times-Bold;\f1\froman\fcharset0 Times-Roman;\f2\fmodern\fcharset0 Courier;
+\f3\ftech\fcharset77 Symbol;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+{\*\listtable{\list\listtemplateid1\listhybrid{\listlevel\levelnfc0\levelnfcn0\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{decimal\}}{\leveltext\leveltemplateid1\'01\'00;}{\levelnumbers\'01;}\fi-360\li720\lin720 }{\listname ;}\listid1}
+{\list\listtemplateid2\listhybrid{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{disc\}}{\leveltext\leveltemplateid101\'01\uc0\u8226 ;}{\levelnumbers;}\fi-360\li720\lin720 }{\listname ;}\listid2}}
+{\*\listoverridetable{\listoverride\listid1\listoverridecount0\ls1}{\listoverride\listid2\listoverridecount0\ls2}}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\sa280\partightenfactor0
+
+\f0\b\fs28 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Data join strategy using county FIPS (sketch)\
+\pard\pardeftab720\sa240\partightenfactor0
+
+\fs24 \cf0 \strokec2 Canonical key:
+\f1\b0  
+\f0\b 12\uc0\u8209 digit FIPS
+\f1\b0  (or 5\uc0\u8209 digit state+county FIPS for county level). Use the 
+\f0\b 5\uc0\u8209 digit county FIPS
+\f1\b0  for county joins.\
+
+\f0\b Join steps
+\f1\b0 \
+\pard\tx220\tx720\pardeftab720\li720\fi-720\sa240\partightenfactor0
+\ls1\ilvl0
+\f0\b \cf0 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	1	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Acquire raw tables
+\f1\b0  and keep original metadata and vintage (e.g., ACS 2019 5\uc0\u8209 yr, CDC VaxView 2022). 
+\f0\b Record vintage
+\f1\b0  in codebook.\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	2	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Normalize geography:
+\f1\b0  ensure every dataset has a 
+\f2\fs26 state_fips
+\f0\b\fs24  + 
+\f2\b0\fs26 county_fips
+\f1\fs24  or combined 
+\f2\fs26 county_fips5
+\f1\fs24  (zero\uc0\u8209 padded 5\u8209 digit string).\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	3	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Standardize time:
+\f1\b0  convert time fields to a common granularity (e.g., year or month) and create 
+\f2\fs26 year
+\f1\fs24 , 
+\f2\fs26 month
+\f1\fs24  columns.\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	4	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Left\uc0\u8209 join
+\f1\b0  vaccination outcome (CDC) to ACS/AHRQ/FCC by 
+\f2\fs26 county_fips5
+\f1\fs24  + 
+\f2\fs26 year
+\f1\fs24  (or year window).\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	5	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Attach Trends:
+\f1\b0  map Google Trends metro/state to counties \'97 if county\uc0\u8209 level Trends unavailable, 
+\f0\b assign metro/state trend to counties within that metro
+\f1\b0  and flag as proxy. Create 
+\f2\fs26 trends_source
+\f1\fs24  flag.\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	6	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Quality checks:
+\f1\b0  verify row counts, check unmatched FIPS, and produce a 
+\f0\b merge diagnostics table
+\f1\b0  (counts matched, unmatched, duplicates).\
+\ls1\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	7	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Save canonical merged table
+\f1\b0  with provenance columns: 
+\f2\fs26 source_name
+\f1\fs24 , 
+\f2\fs26 source_vintage
+\f1\fs24 , 
+\f2\fs26 download_date
+\f1\fs24 .\
+\pard\pardeftab720\sa280\partightenfactor0
+
+\f0\b\fs28 \cf0 Risks, limitations, and quick mitigations\
+\pard\tx220\tx720\pardeftab720\li720\fi-720\sa240\partightenfactor0
+\ls2\ilvl0
+\fs24 \cf0 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	\uc0\u8226 	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Trends are relative and sampled
+\f1\b0  \'97 mitigate with rolling averages and multiple keywords.\
+\ls2\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	\uc0\u8226 	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 ACS vintages are multi\uc0\u8209 year
+\f1\b0  \'97 document vintages and avoid false temporal precision.\
+\ls2\ilvl0
+\f0\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 {\listtext	\uc0\u8226 	}\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Geography mismatches
+\f1\b0  (e.g., metro 
+\f3 \uc0\u8594 
+\f1  county) \'97 flag proxies and run sensitivity checks.\
+\pard\tx720\pardeftab720\sa240\partightenfactor0
+\cf0 \strokec2 \
+}
