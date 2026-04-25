@@ -1,0 +1,7 @@
+{
+  "model_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/models/gbm_final.joblib",
+  "preds_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/gbm_preds_full.csv",
+  "model_checksum": "3b9056a575cf0d59d0e4b7df6c31a930c882d39982b8d8f6b7e5d80e2f55bf31",
+  "preds_checksum": "4fe5607227e2e48df3a274d92ec655a5a203e9db4e2f2a49e4039bd966d1e1b2",
+  "timestamp": "2026-04-25T04:35:40Z"
+}

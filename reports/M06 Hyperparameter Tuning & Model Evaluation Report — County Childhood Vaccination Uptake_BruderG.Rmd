@@ -1,0 +1,251 @@
+---
+title: "M06 Hyperparameter Tuning & Model Evaluation Report — County Childhood Vaccination Uptake"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+bibliography: references.bib
+csl: apa.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(rsample)
+library(parsnip)
+library(workflows)
+library(tune)
+library(recipes)
+library(yardstick)
+library(vip)
+library(doParallel)
+registerDoParallel(cores = parallel::detectCores() - 1)
+set.seed(2026)
+```
+
+### Title and Author
+
+**Project title:** County Childhood Vaccination Uptake — Hyperparameter tuning & evaluation  
+**Author:** Geoffrey Bruder
+
+---
+
+## Artifact ingestion for reproducible reporting
+
+```{r read-artifacts, echo=FALSE}
+library(jsonlite)
+library(readr)
+outputs_dir <- "outputs"
+metrics_path <- file.path(outputs_dir, "metrics.json")
+tuning_path <- file.path(outputs_dir, "tuning_metrics.json")
+holdout_path <- file.path(outputs_dir, "holdout_with_probs.csv")
+
+metrics <- if (file.exists(metrics_path)) fromJSON(metrics_path) else list()
+tuning_metrics <- if (file.exists(tuning_path)) fromJSON(tuning_path) else list()
+holdout <- if (file.exists(holdout_path)) read_csv(holdout_path) else tibble()
+
+# convenience variables
+rf_baseline_metrics <- metrics$rf_baseline
+rf_tuned_metrics <- tuning_metrics$rf_tuned
+enet_tuned_metrics <- tuning_metrics$enet_tuned
+```
+
+---
+
+## Background & Question (Recap)
+
+This report documents hyperparameter tuning, model selection, and evaluation for models predicting county-level MMR uptake. It builds on M04 (preprocessing) and M05 (baseline models).
+
+---
+
+## Methods — tuning strategy
+
+**Models to tune**
+
+1. **Elastic Net (glmnet)** — tune `penalty` (lambda) and `mixture` (alpha).
+2. **Random Forest (ranger)** — tune `mtry`, `min_n`, and `sample_size` (if supported).
+3. **Gradient Boosted Trees (optional)** — `xgboost` or `boost_tree` for comparison (tunable).
+
+**Tuning approach**
+
+- **Resampling:** 5-fold cross-validation on the training set (same split as M05).
+- **Search method:** randomized grid (`tune_grid`) then refine with `tune_bayes` if needed.
+- **Evaluation metric:** RMSE primary; MAE and \(R^2\) secondary.
+- **Overfitting control:** nested resampling is recommended for final model selection; here we use repeated CV and holdout test set for final evaluation.
+
+---
+
+## Code: prepare data and resamples
+
+```{r load-resamples}
+df <- read_csv("data_clean/analysis_table.csv") %>% filter(!is.na(coverage_estimate))
+df <- df %>% mutate(coverage_q = ntile(coverage_estimate, 5))
+split <- initial_split(df, prop = 0.8, strata = coverage_q)
+train <- training(split) %>% select(-coverage_q)
+test <- testing(split) %>% select(-coverage_q)
+
+model_rec <- recipe(coverage_estimate ~ ., data = train) %>%
+  update_role(fips, new_role = "id") %>%
+  step_rm(fips) %>%
+  step_medianimpute(all_numeric_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+
+folds <- vfold_cv(train, v = 5, strata = coverage_estimate)
+```
+
+---
+
+## Elastic Net tuning
+
+```{r enet-tune}
+enet_spec <- linear_reg(penalty = tune(), mixture = tune()) %>% set_engine("glmnet")
+enet_wf <- workflow() %>% add_model(enet_spec) %>% add_recipe(model_rec)
+
+enet_grid <- grid_regular(penalty(range = c(-5, 1)), mixture(range = c(0,1)), levels = c(10, 5))
+
+set.seed(2026)
+enet_res <- tune_grid(
+  enet_wf,
+  resamples = folds,
+  grid = enet_grid,
+  metrics = metric_set(rmse, rsq, mae),
+  control = control_grid(save_pred = TRUE)
+)
+
+best_enet <- select_best(enet_res, "rmse")
+best_enet
+```
+
+**Refit on full training set and evaluate on test**
+
+```{r enet-final}
+enet_final <- finalize_workflow(enet_wf, best_enet) %>% fit(data = train)
+enet_test_preds <- predict(enet_final, test) %>% bind_cols(test %>% select(coverage_estimate))
+enet_metrics <- metrics(enet_test_preds, truth = coverage_estimate, estimate = .pred)
+enet_metrics
+# Save tuning metrics for Rmd consumption
+tuning_metrics <- list(enet_tuned = list(rmse = enet_metrics %>% filter(.metric=='rmse') %>% pull(.estimate),
+                                         mae = enet_metrics %>% filter(.metric=='mae') %>% pull(.estimate),
+                                         r2 = enet_metrics %>% filter(.metric=='rsq') %>% pull(.estimate)))
+write_json(tuning_metrics, path = file.path("outputs","tuning_metrics.json"), auto_unbox = TRUE, pretty = TRUE)
+```
+
+---
+
+## Random Forest tuning
+
+```{r rf-tune}
+rf_spec <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>% set_engine("ranger") %>% set_mode("regression")
+rf_wf <- workflow() %>% add_model(rf_spec) %>% add_recipe(model_rec)
+
+rf_grid <- grid_random(
+  mtry(range = c(2, 30)),
+  min_n(range = c(2, 50)),
+  size = 30
+)
+
+set.seed(2026)
+rf_res <- tune_grid(
+  rf_wf,
+  resamples = folds,
+  grid = rf_grid,
+  metrics = metric_set(rmse, rsq, mae),
+  control = control_grid(save_pred = TRUE)
+)
+
+best_rf <- select_best(rf_res, "rmse")
+best_rf
+```
+
+**Refit and evaluate**
+
+```{r rf-final}
+rf_final <- finalize_workflow(rf_wf, best_rf) %>% fit(data = train)
+rf_test_preds <- predict(rf_final, test) %>% bind_cols(test %>% select(coverage_estimate))
+rf_metrics <- metrics(rf_test_preds, truth = coverage_estimate, estimate = .pred)
+rf_metrics
+# Append RF tuning metrics to outputs/tuning_metrics.json
+tuning_metrics$rf_tuned <- list(rmse = rf_metrics %>% filter(.metric=='rmse') %>% pull(.estimate),
+                                mae = rf_metrics %>% filter(.metric=='mae') %>% pull(.estimate),
+                                r2 = rf_metrics %>% filter(.metric=='rsq') %>% pull(.estimate))
+write_json(tuning_metrics, path = file.path("outputs","tuning_metrics.json"), auto_unbox = TRUE, pretty = TRUE)
+```
+
+**Variable importance**
+
+```{r rf-vip-final}
+ranger_fit <- extract_fit_parsnip(rf_final)$fit
+vip::vip(ranger_fit, num_features = 25)
+```
+
+---
+
+## Model comparison and selection
+
+```{r compare}
+enet_metrics <- enet_metrics %>% mutate(model = "ElasticNet")
+rf_metrics <- rf_metrics %>% mutate(model = "RandomForest")
+bind_rows(enet_metrics, rf_metrics) %>% select(model, .metric, .estimate)
+```
+
+**Notebook-derived tuning summary (auto-inserted)**
+
+- **RF tuned RMSE (test):** `r if (!is.null(tuning_metrics$rf_tuned$rmse)) sprintf('%.3f', tuning_metrics$rf_tuned$rmse) else 'n/a'`  
+- **Elastic Net tuned RMSE (test):** `r if (!is.null(tuning_metrics$enet_tuned$rmse)) sprintf('%.3f', tuning_metrics$enet_tuned$rmse) else 'n/a'`  
+
+(Values read from `outputs/tuning_metrics.json`.)
+
+---
+
+## Calibration and post-hoc evaluation
+
+```{r residuals}
+rf_test_preds <- rf_test_preds %>% mutate(resid = coverage_estimate - .pred)
+ggplot(rf_test_preds, aes(x = .pred, y = resid)) + geom_point(alpha = 0.4) + geom_smooth(method = "loess") + labs(x = "Predicted", y = "Residual")
+```
+
+---
+
+## Final evaluation and chosen model
+
+- Present final test RMSE, MAE, and \(R^2\) for the chosen model (see `outputs/tuning_metrics.json`).
+- Provide a short table of top 10 predictors and their importance (for RF) or standardized coefficients (for Elastic Net).
+
+```{r final-report}
+if (file.exists("outputs/tuning_metrics.json")) {
+  tuning <- fromJSON("outputs/tuning_metrics.json")
+  print(tuning)
+}
+```
+
+---
+
+## Discussion & Next Steps
+
+**Key takeaways**
+
+- Tuning improved baseline performance (see `outputs/tuning_metrics.json`).
+- `vaccinate_children` (COVIDcast) consistently ranks high in importance, supporting its predictive value.
+- Elastic Net provides interpretable coefficients and helps identify directionality of associations.
+
+**Next steps**
+
+1. **Nested cross-validation** for robust model selection and to avoid optimistic bias from tuning on a single CV split.
+2. **Spatial modeling**: if residuals show spatial autocorrelation, implement spatial error/lag models or include spatial random effects.
+3. **Model deployment considerations**: create a reproducible pipeline (preprocessing recipe + model object) and document runtime dependencies.
+4. **Sensitivity analyses**: test model stability to different train/test splits and to removal of high-missingness variables.
+
+---
+
+## Appendix
+
+- Final model objects saved to `models/` (e.g., `models/rf_tuned.joblib`, `models/enet_tuned.rds`).
+- Tuning results saved to `outputs/tuning_metrics.json`.
+- Codebook and data dictionary included in `appendix/`.
+```
+
+---

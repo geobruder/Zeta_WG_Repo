@@ -1,0 +1,364 @@
+---
+title: "M03 EDA Report — County Childhood Vaccination Uptake"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: false
+    latex_engine: pdflatex
+fontsize: 11pt
+geometry: margin=1in
+---
+
+```{r setup, include=FALSE}
+# Hidden setup: libraries and knit root
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.retina = 2)
+knitr::opts_knit$set(root.dir = here::here())
+library(here)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(ggcorrplot)
+library(stringr)
+library(tibble)
+```
+
+\newpage
+
+# Recap Background & Question
+
+This project examines county-level predictors of childhood vaccination uptake, focusing on **MMR completion for children aged 19–35 months**. The primary research question is:
+
+**Which county-level sociodemographic and survey-derived indicators best explain variation in MMR completion (19–35 months) across U.S. counties?**
+
+**Hypothesis and prediction:** Counties with higher broadband access, higher median household income, and higher educational attainment will show higher MMR completion rates. Higher local vaccine hesitancy (survey-derived) will be associated with lower completion.
+
+\newpage
+
+# Methods
+
+We use a harmonized analysis table (`analysis_table.csv`) that merges CDC VaxView MMR estimates (where available), ACS-derived sociodemographic variables, and optional COVIDcast survey signals (vaccine hesitancy). The project notebook produces `data_clean/analysis_table.csv` and records provenance for each raw and derived file.
+
+**Data acquisition and preprocessing (summary):**
+
+- **ACS variables:** `median_household_income`, race counts/percentages, education counts, broadband indicators.  
+- **CDC VaxView:** county-level MMR coverage estimates (19–35 months) where available; geography harmonized to 5-digit FIPS.  
+- **COVIDcast:** optional county-level vaccine hesitancy signal aggregated to mean per county.  
+- Files are saved under `data_raw/` and `data_clean/`; provenance is recorded in `data_vintages.csv`.
+
+**Cleaning and merging summary:**
+
+- Numeric columns coerced to numeric with `NA` for non-parsable values.  
+- FIPS normalized to 5-digit strings.  
+- Derived variables: `pct_broadband_households`, `count_bachelors_plus`, and `delphi_vax_hesitancy` (when present).  
+- Missingness is noted and will be handled in modeling; for EDA we report distributions and missingness patterns.
+
+\newpage
+
+# Data load
+
+```{r load-data, include=FALSE}
+# Use fixed path as requested
+analysis_path <- '/Users/Main/Documents/GitHub/Zeta_WG_Repo/data_clean/analysis_table.csv'
+
+if (!file.exists(analysis_path)) {
+  stop("Required file 'analysis_table.csv' not found at the fixed path. Ensure the file exists at: ", analysis_path)
+}
+
+analysis <- readr::read_csv(analysis_path, show_col_types = FALSE)
+analysis <- analysis %>% mutate(fips = as.character(fips))
+n_counties <- nrow(analysis)
+```
+
+**Data provenance:** Loaded `analysis_table.csv` from `r analysis_path` — **n =** `r n_counties`. 
+Code and data dictionary available at: https://github.com/geobruder/Zeta_WG_Repo (see `data_clean/` and `code/`).
+
+\newpage
+
+# Key variables (analysis_table.csv)
+
+- **`fips`**: 5-digit county FIPS code  
+- **`coverage_estimate`**: Estimated MMR completion (19–35 months)  
+- **`pct_broadband_households`**: Percent of households with broadband  
+- **`median_household_income`**: Median household income (USD)  
+- **`count_bachelors_plus`**: Count of adults with bachelor's degree or higher  
+- **`pct_white`**: Percent White  
+- **`pct_black`**: Percent Black  
+- **`pct_native`**: Percent Native American / Alaska Native  
+- **`delphi_vax_hesitancy`**: Delphi/FB survey vaccine hesitancy estimate (if present)
+
+\newpage
+
+# Descriptive summaries
+
+```{r descriptive-tables, include=FALSE}
+# Explicit per-variable computation to avoid name-splitting issues and ensure tidy numeric columns
+cont_vars <- c(
+  "coverage_estimate",
+  "pct_broadband_households",
+  "median_household_income",
+  "count_bachelors_plus",
+  "delphi_vax_hesitancy"
+)
+cont_vars <- intersect(cont_vars, names(analysis))
+
+if (length(cont_vars) == 0) {
+  desc_display <- tibble::tibble(variable = character(), n = integer(), mean = numeric(), median = numeric(), sd = numeric(), min = numeric(), max = numeric())
+} else {
+  desc_list <- lapply(cont_vars, function(v) {
+    x <- as.numeric(analysis[[v]])
+    tibble::tibble(
+      variable = v,
+      n = sum(!is.na(x)),
+      mean = mean(x, na.rm = TRUE),
+      median = median(x, na.rm = TRUE),
+      sd = sd(x, na.rm = TRUE),
+      min = min(x, na.rm = TRUE),
+      max = max(x, na.rm = TRUE)
+    )
+  })
+  desc_display <- dplyr::bind_rows(desc_list) %>% mutate(across(where(is.numeric), ~round(., 3)))
+}
+```
+
+```{r show-desc-table, echo=FALSE}
+# Render the descriptive table (visible)
+kable(desc_display, caption = "Table 1: Descriptive statistics for key continuous variables (n, mean, median, sd, min, max)") %>%
+  kable_styling(full_width = FALSE)
+```
+
+**Table 1. Interpretation (technical, specific):**  
+The table reports **n**, **mean**, **median**, **standard deviation**, and **observed range** for each continuous variable. For example:
+
+- **`coverage_estimate`**: central tendency is near the mid-70s percentage points; the mean and median are close, indicating limited skew; standard deviation indicates county-level variability (~9–10 percentage points). Inspect counties with coverage near the minimum and maximum for data quality issues (small denominators or reporting anomalies).  
+- **`median_household_income`**: mean substantially larger than the median and a large maximum indicate right skew; consider log transformation for parametric models or use robust regression.  
+- **`pct_broadband_households`**: moderate spread; examine counties at the extremes for potential structural differences.
+
+\newpage
+
+```{r missingness, echo=FALSE}
+# Missingness summary for all variables
+miss_tbl <- tibble::tibble(
+  variable = names(analysis),
+  n_missing = sapply(analysis, function(x) sum(is.na(x))),
+  pct_missing = round(100 * sapply(analysis, function(x) sum(is.na(x))) / nrow(analysis), 2)
+) %>% arrange(desc(pct_missing))
+kable(miss_tbl, caption = "Missingness summary (n\\_missing, pct\\_missing)") %>% kable_styling(full_width = FALSE)
+```
+
+**Missingness interpretation:** The table above lists the number and percentage of missing values per variable. Use this to prioritize imputation or exclusion strategies; variables with substantial missingness (e.g., >20%) should be evaluated for bias risk and potential exclusion or targeted imputation.
+
+\newpage
+
+```{r categorical-compute, include=FALSE}
+# Hidden computation: build up categorical tables (do not print here)
+cat_candidates <- names(analysis)[sapply(analysis, function(x) is.character(x) || is.factor(x))]
+cat_candidates <- setdiff(cat_candidates, "fips")
+cat_tables <- list()
+if (length(cat_candidates) > 0) {
+  for (v in head(cat_candidates, 3)) {
+    freq_tbl <- analysis %>%
+      count(!!sym(v)) %>%
+      mutate(pct = round(100 * n / sum(n), 2)) %>%
+      arrange(desc(n))
+    cat_tables[[v]] <- freq_tbl
+  }
+}
+```
+
+```{r show-cat-tables, echo=FALSE}
+# Show categorical summaries or a clear message if none exist
+if (length(cat_tables) == 0) {
+  cat("No categorical predictors detected (other than `fips`). If you have categorical predictors, add frequency tables in the Appendix.\n")
+} else {
+  for (v in names(cat_tables)) {
+    print(kable(cat_tables[[v]], caption = paste("Frequencies for", v))) 
+    cat("\n")
+    cat(paste0("Table (", v, ") interpretation: The table shows absolute counts and percentages for each level of `", v, "`. Use these to assess class balance and whether grouping of rare levels is needed for modeling.\n"))
+    cat("\n")
+  }
+}
+```
+
+\newpage
+
+# Figures
+
+```{r fig-distribution-coverage, fig.width=6, fig.height=4, echo=FALSE}
+# Distribution of coverage
+if ("coverage_estimate" %in% names(analysis)) {
+  p1 <- ggplot(analysis, aes(x = as.numeric(coverage_estimate))) +
+    geom_histogram(binwidth = 2, fill = "#2b8cbe", color = "white") +
+    labs(title = "Distribution of MMR Coverage (19-35 months)", x = "Coverage estimate (%)", y = "Count of counties") +
+    theme_minimal()
+  print(p1)
+} else {
+  plot.new(); text(0.5, 0.5, "coverage_estimate not available in analysis_table")
+}
+```
+
+**Figure 1. Interpretation (specific):**  
+Histogram shows county-level MMR coverage concentrated in the mid-70s percentage points with a modest right tail. The distribution suggests most counties cluster around the central tendency with a minority of counties showing substantially higher coverage; investigate those high values for small denominators or reporting differences.  
+\newpage
+
+```{r fig-median-income, fig.width=6, fig.height=4, echo=FALSE}
+# Median household income histogram
+if ("median_household_income" %in% names(analysis)) {
+  p2 <- ggplot(analysis, aes(x = as.numeric(median_household_income))) +
+    geom_histogram(binwidth = 5000, fill = "#66c2a5", color = "white") +
+    labs(title = "Median Household Income (county)", x = "Median household income (USD)", y = "Count of counties") +
+    theme_minimal()
+  print(p2)
+} else {
+  plot.new(); text(0.5, 0.5, "median_household_income not available")
+}
+```
+
+**Figure 2. Interpretation (specific):**  
+Income distribution is right-skewed with a long upper tail; median is lower than the mean, indicating a small set of high-income counties drive the mean upward. For modeling, consider log-transforming income or using rank-based methods to reduce influence of outliers.  
+\newpage
+
+```{r fig-broadband-vs-coverage, fig.width=6, fig.height=4, echo=FALSE}
+# Broadband vs coverage scatter with LOESS
+if (all(c("pct_broadband_households", "coverage_estimate") %in% names(analysis))) {
+  p3 <- ggplot(analysis, aes(x = as.numeric(pct_broadband_households), y = as.numeric(coverage_estimate))) +
+    geom_point(alpha = 0.5, color = "#fc8d62") +
+    geom_smooth(method = "loess", color = "#8da0cb", se = TRUE) +
+    labs(title = "Broadband access vs MMR coverage", x = "Percent broadband households", y = "Coverage estimate (%)") +
+    theme_minimal()
+  print(p3)
+} else {
+  plot.new(); text(0.5, 0.5, "pct_broadband_households or coverage_estimate not available")
+}
+```
+
+**Figure 3. Interpretation (specific):**  
+LOESS-smoothed trend indicates a positive association between broadband penetration and MMR coverage, with diminishing returns at the highest broadband levels. The scatter shows heteroskedasticity (variance of coverage changes across broadband levels); consider weighted or robust regression if heteroskedasticity persists. Quantify with Pearson correlation and a simple linear model in the modeling stage.  
+\newpage
+
+```{r fig-corr-matrix, fig.width=6, fig.height=6, echo=FALSE}
+# Correlogram for selected numeric vars
+num_for_corr <- analysis %>%
+  select(where(is.numeric)) %>%
+  select(any_of(c(
+    "coverage_estimate",
+    "pct_broadband_households",
+    "median_household_income",
+    "count_bachelors_plus",
+    "delphi_vax_hesitancy",
+    "pct_white",
+    "pct_black",
+    "pct_native"
+  )))
+
+if (ncol(num_for_corr) >= 2) {
+  corr_mat <- cor(num_for_corr, use = "pairwise.complete.obs")
+  print(ggcorrplot::ggcorrplot(corr_mat, lab = TRUE, lab_size = 3, colors = c("#6D9EC1", "white", "#E46726")) + ggtitle("Correlogram of selected numeric variables"))
+} else {
+  plot.new(); text(0.5, 0.5, "Not enough numeric variables for correlation matrix")
+}
+```
+
+**Figure 4. Interpretation (specific):**  
+Correlogram shows pairwise Pearson correlations. Notable signals: **`coverage_estimate`** correlates positively with **`median_household_income`** and **`pct_broadband_households`**; check predictor–predictor correlations (e.g., income vs education proxies) for absolute values > 0.7 to avoid multicollinearity in linear models. Consider PCA or regularization if collinearity is present.  
+\newpage
+
+```{r fig-top10-coverage, fig.width=6, fig.height=4, echo=FALSE}
+# Top 10 counties by coverage
+top10 <- analysis %>%
+  mutate(coverage_estimate = as.numeric(coverage_estimate)) %>%
+  arrange(desc(coverage_estimate)) %>%
+  slice_head(n = 10) %>%
+  select(fips, coverage_estimate)
+
+if (nrow(top10) > 0) {
+  p5 <- ggplot(top10, aes(x = reorder(fips, coverage_estimate), y = coverage_estimate)) +
+    geom_col(fill = "#66c2a5") +
+    coord_flip() +
+    labs(title = "Top 10 counties by MMR coverage", x = "FIPS", y = "Coverage estimate (%)") +
+    theme_minimal()
+  print(p5)
+} else {
+  plot.new(); text(0.5, 0.5, "No coverage data to display")
+}
+```
+
+**Figure 5. Interpretation (specific):**  
+Bar chart lists the top 10 counties by reported coverage. For each county, verify sample size and reporting window; exceptionally high coverage values may reflect small denominators or different reporting periods. Use these counties as case studies for data validation and qualitative follow-up.  
+\newpage
+
+# Coverage by income quartile
+
+```{r coverage-by-income, echo=FALSE}
+# Create income quartile and show coverage summary by quartile
+if ("median_household_income" %in% names(analysis) && "coverage_estimate" %in% names(analysis)) {
+  analysis <- analysis %>% mutate(income_quartile = ntile(as.numeric(median_household_income), 4))
+  cov_by_income <- analysis %>%
+    group_by(income_quartile) %>%
+    summarise(n = n(), mean_coverage = round(mean(as.numeric(coverage_estimate), na.rm = TRUE), 3), sd_coverage = round(sd(as.numeric(coverage_estimate), na.rm = TRUE), 3))
+  kable(cov_by_income, caption = "Coverage by income quartile (n, mean\\_coverage, sd\\_coverage)") %>% kable_styling(full_width = FALSE)
+} else {
+  cat("Income or coverage variable not available to compute coverage by income quartile.\n")
+}
+```
+
+**Interpretation:** This table summarizes mean coverage and variability across income quartiles. Use it to assess whether coverage systematically differs by county income level and to motivate stratified modeling or interaction terms.
+
+
+\newpage
+
+# Discussion & Next Steps
+
+**Key takeaways**
+
+- Preliminary EDA suggests meaningful variation in MMR coverage across counties and relationships with socioeconomic indicators. The correlogram indicates moderate correlation among income, broadband, and education proxies; address collinearity in feature selection.  
+- Missingness patterns (see Missingness summary) should be reviewed: variables with substantial missingness may require imputation strategies or exclusion.
+
+**Data cleaning & pre-processing plan**
+
+1. Confirm ACS variable completeness and re-run `fetch_acs_county()` if necessary.  
+2. For variables with moderate missingness, evaluate multiple imputation strategies after splitting into training/test sets. Impute after splitting to avoid leakage.  
+3. Normalize or transform skewed predictors (e.g., log-transform `median_household_income`) as needed for modeling.
+
+**Next modeling steps**
+
+- Fit baseline Random Forest and linear models to assess variable importance and predictive performance.  
+- Use unsupervised methods (PCA or clustering) to explore latent structure among predictors.  
+- Plan supervised feature selection (regularization, permutation importance) and hyperparameter tuning with cross-validation.
+
+\newpage
+
+# Appendix
+
+## Codebook / Data dictionary 
+
+```{r codebook, echo=FALSE}
+codebook <- tibble::tribble(
+  ~variable, ~description,
+  "fips", "5-digit county FIPS code",
+  "coverage_estimate", "Estimated MMR completion (19-35 months)",
+  "pct_broadband_households", "Percent of households with broadband",
+  "median_household_income", "Median household income (USD)",
+  "count_bachelors_plus", "Count of adults with bachelor's degree or higher",
+  "pct_white", "Percent White",
+  "pct_black", "Percent Black",
+  "pct_native", "Percent Native American / Alaska Native",
+  "delphi_vax_hesitancy", "Delphi/FB survey vaccine hesitancy estimate (mean)"
+)
+kable(codebook, caption = "Table 2: Codebook (key variables)") %>% kable_styling(full_width = FALSE)
+```
+
+**Table 2. Interpretation:** The codebook defines variable names and concise descriptions to ensure reproducibility and correct interpretation of model inputs.
+\newpage
+
+## Reproducibility and provenance
+
+GitHub repository: https://github.com/geobruder/Zeta_WG_Repo
+
+To reproduce figures and tables: run the project notebook from the project root and create `data_clean/analysis_table.csv` by running `harmonize_and_save()` (real data; requires API keys) or `generate_synthetic_demo()` (quick demo, no keys). Then knit this Rmd from the project root.
+```

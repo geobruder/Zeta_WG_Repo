@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Geoffrey Bruder" />
+
+<meta name="date" content="2026-04-24" />
+
+<title>Hyperparameter Tuning &amp; Model Evaluation Report — County Childhood Vaccination Uptake</title>
+
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/header-attrs-2.28/header-attrs.js"></script>
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/navigation-1.1/tabsets.js"></script>
+<link href="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/highlightjs-9.12.0/highlight.js"></script>
+<link href="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/pagedtable-1.1/css/pagedtable.css" rel="stylesheet" />
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/pagedtable-1.1/js/pagedtable.js"></script>
+<script src="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/kePrint-0.0.1/kePrint.js"></script>
+<link href="M06-Hyperparameter-Tuning-Model-Evaluation-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Hyperparameter Tuning &amp; Model
+Evaluation Report — County Childhood Vaccination Uptake</h1>
+<h4 class="author">Geoffrey Bruder</h4>
+<h4 class="date">April 24, 2026</h4>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#executive-summary" id="toc-executive-summary">Executive
+summary</a>
+<ul>
+<li><a href="#tuning-methodology-recap"
+id="toc-tuning-methodology-recap">Tuning methodology (recap)</a></li>
+<li><a href="#tuned-hyperparameters-parsed-table"
+id="toc-tuned-hyperparameters-parsed-table">Tuned hyperparameters
+(parsed table)</a></li>
+<li><a href="#hyperparameter-search-space-justification"
+id="toc-hyperparameter-search-space-justification">Hyperparameter search
+space justification</a></li>
+<li><a href="#calibration-plot-and-reliability-diagram"
+id="toc-calibration-plot-and-reliability-diagram">Calibration plot and
+reliability diagram</a></li>
+<li><a href="#conformal-coverage-diagnostic"
+id="toc-conformal-coverage-diagnostic">Conformal coverage
+diagnostic</a></li>
+<li><a href="#example-prediction-intervals-first-10-rows-for-best-model"
+id="toc-example-prediction-intervals-first-10-rows-for-best-model">Example
+prediction intervals (first 10 rows for best model)</a></li>
+<li><a href="#diagnostics-and-next-steps"
+id="toc-diagnostics-and-next-steps">Diagnostics and next steps</a></li>
+<li><a href="#appendix-reproducibility-checklist"
+id="toc-appendix-reproducibility-checklist">Appendix: reproducibility
+checklist</a></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="executive-summary" class="section level1">
+<h1>Executive summary</h1>
+<p>This report documents hyperparameter tuning strategy, final tuned
+hyperparameters, conformal intervals and calibration diagnostics, and
+recommendations for further tuning and deployment.</p>
+<div style="page-break-after: always;"></div>
+<div id="tuning-methodology-recap" class="section level2">
+<h2>Tuning methodology (recap)</h2>
+<ul>
+<li>Nested cross‑validation: outer 5‑fold CV for performance estimation;
+inner 3‑fold CV for hyperparameter search (RandomizedSearchCV).<br />
+</li>
+<li>Randomized search balances exploration and compute; parameter
+validation prevents invalid parameter choices.<br />
+</li>
+<li>Final refit: best hyperparameters re-searched on full cleaned
+dataset and final models saved.</li>
+</ul>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="tuned-hyperparameters-parsed-table" class="section level2">
+<h2>Tuned hyperparameters (parsed table)</h2>
+<pre class="r"><code>if (!is.null(ms)) {
+  rows &lt;- map_dfr(names(ms)[names(ms) != &quot;run_info&quot;], function(nm) {
+    v &lt;- ms[[nm]]
+    bp &lt;- v$best_params_full %||% list()
+    # parse common hyperparameters into columns
+    tibble(
+      model = nm,
+      n_estimators = bp$n_estimators %||% NA,
+      max_depth = bp$max_depth %||% NA,
+      learning_rate = bp$learning_rate %||% NA,
+      num_leaves = bp$num_leaves %||% NA,
+      alpha = bp$alpha %||% NA,
+      l1_ratio = bp$l1_ratio %||% NA
+    )
+  })
+  rows %&gt;% mutate(across(where(is.numeric), ~ round(.x, 4))) %&gt;% kable(caption=&quot;Parsed best hyperparameters per model (final refit)&quot;) %&gt;% kable_styling(full_width = FALSE)
+} else {
+  cat(&quot;models_summary.json not found; run nested CV cell first.\n&quot;)
+}</code></pre>
+<table class="table" style="color: black; width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+Parsed best hyperparameters per model (final refit)
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+model
+</th>
+<th style="text-align:right;">
+n_estimators
+</th>
+<th style="text-align:right;">
+max_depth
+</th>
+<th style="text-align:right;">
+learning_rate
+</th>
+<th style="text-align:left;">
+num_leaves
+</th>
+<th style="text-align:right;">
+alpha
+</th>
+<th style="text-align:right;">
+l1_ratio
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+elasticnet
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.9657
+</td>
+<td style="text-align:right;">
+0.8084
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+random_forest
+</td>
+<td style="text-align:right;">
+566
+</td>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+gbm
+</td>
+<td style="text-align:right;">
+260
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+0.0464
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+mlp_pytorch
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+</tr>
+</tbody>
+</table>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="hyperparameter-search-space-justification"
+class="section level2">
+<h2>Hyperparameter search space justification</h2>
+<pre class="r"><code>cat(&quot;Justifications (concise):\n\n&quot;)</code></pre>
+<pre><code>## Justifications (concise):</code></pre>
+<pre class="r"><code>cat(&quot;- Random Forest: n_estimators 100–600 to balance variance reduction vs compute; max_depth options to control tree complexity and avoid overfitting; max_features choices to control feature sampling.\n\n&quot;)</code></pre>
+<pre><code>## - Random Forest: n_estimators 100–600 to balance variance reduction vs compute; max_depth options to control tree complexity and avoid overfitting; max_features choices to control feature sampling.</code></pre>
+<pre class="r"><code>cat(&quot;- Gradient Boosting (sklearn GBM / LightGBM): learning_rate 0.01–0.2 to trade off bias/variance; n_estimators wide range to allow many small steps; max_depth and num_leaves to control complexity.\n\n&quot;)</code></pre>
+<pre><code>## - Gradient Boosting (sklearn GBM / LightGBM): learning_rate 0.01–0.2 to trade off bias/variance; n_estimators wide range to allow many small steps; max_depth and num_leaves to control complexity.</code></pre>
+<pre class="r"><code>cat(&quot;- ElasticNet: alpha and l1_ratio tuned to balance regularization strength and L1/L2 mix for sparsity and stability.\n\n&quot;)</code></pre>
+<pre><code>## - ElasticNet: alpha and l1_ratio tuned to balance regularization strength and L1/L2 mix for sparsity and stability.</code></pre>
+<pre class="r"><code>cat(&quot;- MLP (PyTorch): hidden_sizes and learning rate tuned; early stopping/patience used to avoid overfitting; weight decay for regularization.\n&quot;)</code></pre>
+<pre><code>## - MLP (PyTorch): hidden_sizes and learning rate tuned; early stopping/patience used to avoid overfitting; weight decay for regularization.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="calibration-plot-and-reliability-diagram"
+class="section level2">
+<h2>Calibration plot and reliability diagram</h2>
+<pre class="r"><code># The notebook saves calibration data per model to outputs/calibration_{model}.csv and figures to figures/calibration_{model}.png
+cal_files &lt;- if (dir_exists(outputs_dir)) dir_ls(outputs_dir, regexp = &quot;calibration_.*\\.csv&quot;, recurse = FALSE) else character(0)
+if (length(cal_files) &gt; 0) {
+  for (cf in cal_files) {
+    dfc &lt;- read_csv(cf, show_col_types = FALSE)
+    model_name &lt;- str_remove(path_file(cf), &quot;calibration_|\\.csv&quot;)
+    p &lt;- ggplot(dfc, aes(x = predicted_quantile, y = observed_quantile)) +
+      geom_line() + geom_abline(slope=1, intercept=0, linetype=&quot;dashed&quot;, color=&quot;gray&quot;) +
+      labs(x=&quot;Predicted quantile&quot;, y=&quot;Observed quantile&quot;, caption = glue(&quot;Calibration plot for {model_name}&quot;)) +
+      theme_minimal(base_size=11)
+    print(p)
+  }
+} else {
+  cat(&quot;No calibration CSVs found in outputs/. The notebook can compute predicted vs observed quantiles and save to outputs/calibration_{model}.csv.\n&quot;)
+}</code></pre>
+<pre><code>## No calibration CSVs found in outputs/. The notebook can compute predicted vs observed quantiles and save to outputs/calibration_{model}.csv.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="conformal-coverage-diagnostic" class="section level2">
+<h2>Conformal coverage diagnostic</h2>
+<pre class="r"><code># The notebook computes conformal_q_90 per model and saves preds with intervals; check empirical coverage
+if (!is.null(ms)) {
+  cov_rows &lt;- map_dfr(names(ms)[names(ms) != &quot;run_info&quot;], function(nm) {
+    v &lt;- ms[[nm]]
+    q90 &lt;- v$conformal_q_90 %||% NA
+    preds_path &lt;- path(outputs_dir, paste0(nm, &quot;_preds_full.csv&quot;))
+    if (file_exists(preds_path) &amp;&amp; !is.na(q90)) {
+      preds &lt;- read_csv(preds_path, show_col_types = FALSE)
+      covered &lt;- mean((preds$y_true &gt;= (preds$y_pred - q90)) &amp; (preds$y_true &lt;= (preds$y_pred + q90)), na.rm=TRUE)
+      tibble(model = nm, conformal_q_90 = q90, empirical_coverage = round(covered,3))
+    } else {
+      tibble(model = nm, conformal_q_90 = q90, empirical_coverage = NA_real_)
+    }
+  })
+  cov_rows %&gt;% kable(caption=&quot;Conformal q_90 and empirical coverage (held-out predictions)&quot;) %&gt;% kable_styling(full_width = FALSE)
+  cat(&quot;Interpretation: empirical_coverage close to 0.90 indicates conformal interval q_90 provides near-nominal coverage.\n&quot;)
+} else {
+  cat(&quot;models_summary.json not found; run nested CV cell first.\n&quot;)
+}</code></pre>
+<pre><code>## Interpretation: empirical_coverage close to 0.90 indicates conformal interval q_90 provides near-nominal coverage.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="example-prediction-intervals-first-10-rows-for-best-model"
+class="section level2">
+<h2>Example prediction intervals (first 10 rows for best model)</h2>
+<pre class="r"><code>if (!is.null(ms)) {
+  best &lt;- names(ms)[names(ms) != &quot;run_info&quot;][1]
+  preds_path &lt;- path(outputs_dir, paste0(best, &quot;_preds_full.csv&quot;))
+  if (file_exists(preds_path)) {
+    preds &lt;- read_csv(preds_path, show_col_types = FALSE)
+    q &lt;- ms[[best]]$conformal_q_90 %||% NA
+    if (!is.na(q)) {
+      preds2 &lt;- preds %&gt;% mutate(lower = y_pred - q, upper = y_pred + q) %&gt;% slice_head(n=10)
+      preds2 %&gt;% kable(caption = glue(&quot;Example prediction intervals for {best} (first 10 rows)&quot;)) %&gt;% kable_styling(full_width = FALSE)
+    } else {
+      cat(&quot;Conformal quantile not available for&quot;, best, &quot;\n&quot;)
+    }
+  } else {
+    cat(&quot;Predictions file not found for&quot;, best, &quot;\n&quot;)
+  }
+} else {
+  cat(&quot;models_summary.json not found.\n&quot;)
+}</code></pre>
+<table class="table" style="color: black; width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+Example prediction intervals for elasticnet (first 10 rows)
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+y_true
+</th>
+<th style="text-align:right;">
+y_pred
+</th>
+<th style="text-align:right;">
+lower
+</th>
+<th style="text-align:right;">
+upper
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+88.4
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+87.6
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+89.6
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+69.6
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+64.5
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+86.3
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+86.5
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+84.0
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+82.9
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+88.5
+</td>
+<td style="text-align:right;">
+87.84388
+</td>
+<td style="text-align:right;">
+82.0702
+</td>
+<td style="text-align:right;">
+93.61755
+</td>
+</tr>
+</tbody>
+</table>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="diagnostics-and-next-steps" class="section level2">
+<h2>Diagnostics and next steps</h2>
+<ul>
+<li>Diagnostics performed: hyperparameter parsing, calibration plots,
+conformal coverage diagnostics, artifact manifests with checksums.<br />
+</li>
+<li>Next steps: temporal holdout evaluation, Optuna or Bayesian
+optimization for more efficient search, per-county SHAP reports for top
+counties, deployment checklist.</li>
+</ul>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="appendix-reproducibility-checklist" class="section level2">
+<h2>Appendix: reproducibility checklist</h2>
+<ul>
+<li><code>outputs/models_summary.json</code> exists and contains
+<code>run_info</code>.<br />
+</li>
+<li>Per-model artifact manifests:
+<code>outputs/{model}_artifact_manifest.json</code>.<br />
+</li>
+<li>Calibration CSVs:
+<code>outputs/calibration_{model}.csv</code>.<br />
+</li>
+<li>Conformal quantiles: present in <code>models_summary.json</code>
+under each model’s entry. ```</li>
+</ul>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

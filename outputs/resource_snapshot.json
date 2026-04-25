@@ -1,0 +1,18 @@
+{
+  "resource_snapshot": {
+    "cpu_percent": 14.0,
+    "virtual_memory": {
+      "total": 17179869184,
+      "available": 7932301312,
+      "percent": 53.8,
+      "used": 9245683712,
+      "free": 469331968,
+      "active": 7400615936,
+      "inactive": 6153310208,
+      "wired": 1845067776
+    },
+    "torch_version": "2.2.2",
+    "cuda_available": false,
+    "cuda_device_count": 0
+  }
+}

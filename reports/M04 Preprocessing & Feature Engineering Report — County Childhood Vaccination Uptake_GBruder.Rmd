@@ -1,0 +1,404 @@
+---
+title: "M04 Preprocessing and Feature Engineering Report - County Childhood Vaccination Uptake"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: false
+    latex_engine: pdflatex
+fontsize: 11pt
+geometry: margin=1in
+---
+
+
+```{r setup, include=FALSE}
+# Setup
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.retina = 2)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(recipes)
+library(tibble)
+library(rsample)
+library(parsnip)
+library(workflows)
+library(tune)
+library(yardstick)
+library(vip)
+library(ranger)
+library(stringr)
+set.seed(2026)
+```
+
+\newpage
+
+# Title Page
+
+**Project title:** County Childhood Vaccination Uptake - Preprocessing and Feature Engineering Report  
+**Author:** Geoffrey Bruder  
+**Date:** `r format(Sys.Date(), '%B %d, %Y')`
+
+\newpage
+
+# Background and Question
+
+This report documents preprocessing and feature engineering steps for the county-level MMR completion analysis (19–35 months). The primary research question is: **Which county-level sociodemographic and survey-derived indicators best explain variation in MMR completion across U.S. counties?** The working hypothesis is that higher broadband access, higher median household income, and higher educational attainment are associated with higher MMR completion; higher local vaccine hesitancy is associated with lower completion.
+
+\newpage
+
+# Methods
+
+This section describes the reproducible preprocessing pipeline, the rationale for each step, and the feature engineering trajectories (unsupervised and supervised). The goal is to produce a modeling-ready dataset while avoiding information leakage and preserving interpretability for policy-relevant inference.
+
+## Data source and path
+
+The analysis uses the harmonized `analysis_table.csv` produced by the project pipeline. The file is loaded from the fixed path below to ensure reproducibility.
+
+## Preprocessing plan (summary)
+
+1. Load and validate raw `analysis_table.csv` and confirm expected columns and row counts.  
+2. Sanity checks: types, ranges, and unique-value checks for identifiers (`fips`).  
+3. Split first: create an 80/20 train/test split stratified on target missingness.  
+4. Impute on training only: fit imputation and transformation steps on training data and apply to test data via a `recipes` object. Use median imputation for numeric predictors as a robust baseline.  
+5. Transformations: consider log transform for income, create quartiles for exploratory checks, and center/scale numeric predictors for PCA and many ML algorithms.  
+6. Encoding: convert categorical variables to factors and use one-hot encoding only when required by the model.  
+7. Outlier handling: identify extreme values using robust thresholds and document any winsorization.  
+8. Feature engineering: unsupervised (PCA) to inspect latent structure; supervised (variable importance from baseline models) to prioritize features.  
+9. Reproducibility: record seed, data path, and package versions; save the prepared recipe and final model artifacts.
+
+\newpage
+
+# Data load and provenance
+
+```{r load-data, include=FALSE}
+analysis_path <- '/Users/Main/Documents/GitHub/Zeta_WG_Repo/data_clean/analysis_table.csv'
+if (!file.exists(analysis_path)) stop("analysis_table.csv not found at fixed path.")
+analysis <- readr::read_csv(analysis_path, show_col_types = FALSE)
+analysis <- analysis %>% mutate(fips = as.character(fips))
+n_counties <- nrow(analysis)
+```
+
+**Data provenance:** Loaded `analysis_table.csv` from `r analysis_path` — **n =** `r n_counties`. Repository: https://github.com/geobruder/Zeta_WG_Repo.
+
+\newpage
+
+# Key variables
+
+- **fips**: 5-digit county FIPS code (identifier)  
+- **coverage_estimate**: Estimated MMR completion (19–35 months) — *target*  
+- **pct_broadband_households**: Percent of households with broadband (predictor)  
+- **median_household_income**: Median household income in USD (predictor)  
+- **count_bachelors_plus**: Count of adults with bachelor's degree or higher (predictor)  
+- **delphi_vax_hesitancy**: Delphi/FB survey vaccine hesitancy estimate (predictor)
+
+\newpage
+
+# Descriptive summaries and missingness
+
+```{r desc-and-miss, include=FALSE}
+cont_vars <- c("coverage_estimate","pct_broadband_households","median_household_income","count_bachelors_plus","delphi_vax_hesitancy")
+cont_vars <- intersect(cont_vars, names(analysis))
+desc_list <- lapply(cont_vars, function(v){
+  x <- as.numeric(analysis[[v]])
+  tibble::tibble(variable = v,
+                 n = sum(!is.na(x)),
+                 mean = mean(x, na.rm = TRUE),
+                 median = median(x, na.rm = TRUE),
+                 sd = sd(x, na.rm = TRUE),
+                 min = min(x, na.rm = TRUE),
+                 max = max(x, na.rm = TRUE))
+})
+desc_display <- bind_rows(desc_list) %>% mutate(across(where(is.numeric), ~round(.,3)))
+miss_tbl <- tibble::tibble(
+  variable = names(analysis),
+  n_missing = sapply(analysis, function(x) sum(is.na(x))),
+  pct_missing = round(100 * sapply(analysis, function(x) sum(is.na(x))) / nrow(analysis), 2)
+) %>% arrange(desc(pct_missing))
+
+# summary numbers for captions and discussion
+mean_coverage <- if ("coverage_estimate" %in% names(analysis)) round(mean(as.numeric(analysis$coverage_estimate), na.rm = TRUE), 3) else NA_real_
+sd_coverage   <- if ("coverage_estimate" %in% names(analysis)) round(sd(as.numeric(analysis$coverage_estimate), na.rm = TRUE), 3) else NA_real_
+```
+
+```{r show-desc, echo=FALSE}
+caption1 <- paste0("Table 1: Descriptive statistics for selected continuous variables. Coverage mean = ", mean_coverage, "; coverage SD = ", sd_coverage, ".")
+kable(desc_display, caption = caption1) %>% kable_styling(full_width = FALSE)
+```
+
+**Interpretation (Table 1):**  
+- **Coverage**: mean = **`r mean_coverage`**, SD = **`r sd_coverage`**. Inspect counties with coverage < 60% and > 95% for data issues or special contexts.  
+- **Income**: right skew suggests considering a log transform for models sensitive to outliers.  
+- **Broadband**: moderate dispersion; examine nonlinear relationships and interactions.
+
+\newpage
+
+```{r show-miss, echo=FALSE}
+caption2 <- "Table 2: Missingness summary (counts and percent missing)."
+kable(miss_tbl, caption = caption2) %>% kable_styling(full_width = FALSE)
+```
+
+**Interpretation (Table 2):**  
+Core predictors and the target are complete in this snapshot. The pipeline will impute after splitting if missingness appears in future data.
+
+\newpage
+
+# Preprocessing steps implemented 
+
+This section documents the exact preprocessing steps implemented in the notebook pipeline. Each step includes the rationale and checks performed.
+
+## 1. Data validation and type coercion
+
+- Confirm `fips` is unique per row and cast to character to preserve leading zeros.  
+- Coerce numeric-looking columns to numeric and log any coercion warnings.  
+- Range checks: verify `coverage_estimate` is within plausible bounds (0–100). Flag rows outside expected ranges.
+
+## 2. Train/test split (no leakage)
+
+- **Rationale:** Splitting before imputation and scaling prevents leakage.  
+- **Implementation:** `initial_split()` with `prop = 0.8`, stratified on `target_missing`.
+
+```{r split-code, include=FALSE}
+vars_model <- c("coverage_estimate","pct_broadband_households","median_household_income","count_bachelors_plus","delphi_vax_hesitancy","fips")
+vars_model <- intersect(vars_model, names(analysis))
+df_model <- analysis %>% select(all_of(vars_model)) %>% filter(!is.na(fips))
+df_model <- df_model %>% mutate(target_missing = is.na(coverage_estimate))
+split <- initial_split(df_model, prop = 0.8, strata = target_missing)
+train <- training(split)
+test  <- testing(split)
+```
+
+### Split diagnostics 
+```{r split-diagnostics, echo=FALSE}
+# Show counts and coverage mean by split to verify balance
+split_diag <- tibble::tibble(
+  set = c("train","test"),
+  n = c(nrow(train), nrow(test)),
+  mean_coverage = c(round(mean(train$coverage_estimate, na.rm = TRUE),3), round(mean(test$coverage_estimate, na.rm = TRUE),3))
+)
+kable(split_diag, caption = "Split diagnostics: counts and mean coverage by set") %>% kable_styling(full_width = FALSE)
+```
+
+## 3. Missingness strategy and imputation
+
+- Exploratory checks for missingness patterns (MCAR/MAR/MNAR).  
+- Baseline: median imputation for numeric predictors via `recipes::step_impute_median()` fitted on training data only. For variables with high missingness (>20–30%), plan sensitivity analyses with multiple imputation.
+
+## 4. Transformations and scaling
+
+- `step_center()` and `step_scale()` applied after imputation.  
+- `median_household_income` flagged for optional log transform (`step_log()` or `step_mutate()`).
+
+## 5. Outlier handling
+
+- Detect using 1.5 IQR rule and visual checks. Baseline: prefer robust modeling; do not remove rows by default.
+
+## 6. Encoding and feature creation
+
+- Convert categorical variables to factors; use `step_dummy()` only when necessary.  
+- Create income quartiles and interaction candidates for exploratory and supervised feature engineering.
+
+## 7. Recipe and reproducible pipeline
+
+- The preprocessing pipeline is implemented as a `recipe`, `prep()`ed on training data and `bake()`d on train/test sets.
+
+```{r recipe-code, include=FALSE}
+rec <- recipe(coverage_estimate ~ ., data = train) %>%
+  update_role(fips, new_role = "id") %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors())
+rec_prep <- prep(rec, training = train, verbose = FALSE)
+train_processed <- bake(rec_prep, new_data = train)
+test_processed  <- bake(rec_prep, new_data = test)
+```
+
+### Imputation summary 
+```{r impute-summary, echo=FALSE}
+# Report number of missing values per numeric predictor before imputation (training set)
+impute_summary <- tibble::tibble(
+  variable = names(train)[sapply(train, is.numeric)],
+  n_missing_before = sapply(train[sapply(train, is.numeric)], function(x) sum(is.na(x)))
+)
+kable(impute_summary, caption = "Imputation summary: numeric predictors missing counts in training set (before imputation)") %>% kable_styling(full_width = FALSE)
+```
+
+\newpage
+
+# Unsupervised exploration (PCA)
+
+```{r pca, echo=FALSE, fig.width=6, fig.height=4}
+pca_vars <- train_processed %>% select(-fips, -coverage_estimate, -target_missing)
+if (ncol(pca_vars) >= 2 && nrow(pca_vars) > 2) {
+  pca_res <- prcomp(pca_vars, center = FALSE, scale. = FALSE)
+  var_explained <- summary(pca_res)$importance[2, ]
+  var_explained_rounded <- round(var_explained, 3)
+  qplot(seq_along(var_explained), var_explained, geom = "line") + geom_point() +
+    labs(x = "Principal component", y = "Proportion variance explained", title = "PCA Scree Plot") + theme_minimal()
+} else {
+  plot.new(); text(0.5,0.5,"Not enough numeric predictors for PCA")
+}
+```
+
+### PCA variance table 
+```{r pca-table, echo=FALSE}
+if (exists("var_explained_rounded")) {
+  pca_table <- tibble::tibble(
+    component = paste0("PC", seq_along(var_explained_rounded)),
+    prop_variance = var_explained_rounded
+  )
+  kable(pca_table, caption = "PCA: proportion variance explained by component") %>% kable_styling(full_width = FALSE)
+} else {
+  cat("PCA not computed in this render.")
+}
+```
+
+**Figure 1 caption and interpretation:**  
+- **Caption (computed):** first components explain: `r if (exists("var_explained_rounded")) paste(var_explained_rounded, collapse = ", ") else "N/A"`.  
+- **Interpretation:** Use components only if they capture most variance; otherwise retain individual predictors for interpretability.
+
+\newpage
+
+# Supervised baseline: cross-validated Random Forest (tidymodels)
+
+**Goal:** obtain a robust baseline performance estimate and permutation-based variable importance using `tidymodels` and `ranger`.
+
+```{r rf-tidymodels-setup, include=TRUE}
+rf_spec <- rand_forest(mode = "regression", trees = 500) %>% set_engine("ranger", importance = "permutation")
+rf_recipe <- recipe(coverage_estimate ~ ., data = train) %>% update_role(fips, new_role = "id") %>%
+  step_impute_median(all_numeric_predictors()) %>% step_center(all_numeric_predictors()) %>% step_scale(all_numeric_predictors())
+rf_wf <- workflow() %>% add_model(rf_spec) %>% add_recipe(rf_recipe)
+cv_folds <- vfold_cv(train, v = 5, strata = target_missing)
+rf_res <- fit_resamples(rf_wf, resamples = cv_folds, metrics = metric_set(rmse, rsq), control = control_resamples(save_pred = TRUE))
+rf_metrics <- collect_metrics(rf_res)
+rf_last_fit <- last_fit(rf_wf, split)
+rf_final_fit <- extract_fit_parsnip(rf_last_fit$.workflow[[1]])
+rf_varimp <- vip::vi(rf_final_fit$fit)
+rf_varimp_tbl <- rf_varimp %>% as_tibble() %>% rename(variable = Variable, importance = Importance) %>% arrange(desc(importance))
+# Save varimp to disk for reproducibility (optional)
+# readr::write_csv(rf_varimp_tbl, "rf_varimp_tbl.csv")
+```
+
+```{r show-rf-metrics, echo=FALSE}
+if (exists("rf_metrics")) {
+  rmse_val <- rf_metrics %>% filter(.metric == "rmse") %>% pull(mean) %>% round(., 3)
+  rsq_val  <- rf_metrics %>% filter(.metric == "rsq")  %>% pull(mean) %>% round(., 3)
+  caption3 <- paste0("Table 3: Cross-validated Random Forest metrics (5-fold). RMSE = ", rmse_val, "; R-squared = ", rsq_val, ".")
+  kable(rf_metrics, caption = caption3) %>% kable_styling(full_width = FALSE)
+} else {
+  caption3 <- "Table 3: Cross-validated Random Forest metrics (not computed in this render)."
+  placeholder_metrics <- tibble::tibble(.metric = c("rmse","rsq"), .estimator = "standard", mean = c(NA_real_, NA_real_), n = 5, std_err = c(NA_real_, NA_real_), .config = "pre0_mod0_post0")
+  kable(placeholder_metrics, caption = caption3) %>% kable_styling(full_width = FALSE)
+}
+```
+
+**Interpretation (Table 3):**  
+- RMSE quantifies average prediction error in percentage points on held-out folds.  
+- R-squared indicates proportion of variance explained on resamples; use these as baseline metrics.
+
+\newpage
+
+### Variable importance table (top 10) — 
+```{r show-rf-imp, echo=FALSE}
+if (exists("rf_varimp_tbl") && nrow(rf_varimp_tbl) > 0) {
+  top10_varimp <- rf_varimp_tbl %>% slice_head(n = 10)
+  caption4 <- "Table 4: Random Forest permutation importance ranking (top 10)."
+  kable(top10_varimp, caption = caption4) %>% kable_styling(full_width = FALSE)
+} else {
+  caption4 <- "Table 4: Random Forest permutation importance ranking (not available in this render)."
+  kable(tibble(variable = character(0), importance = numeric(0)), caption = caption4) %>% kable_styling(full_width = FALSE)
+}
+```
+
+**Interpretation (Table 4):**  
+- The table ranks predictors by permutation importance. Inspect top predictors and check for correlated predictors before interpreting effect directions. Save `rf_varimp_tbl` for reproducibility.
+
+\newpage
+
+# Coverage by income quartile (descriptive check)
+
+```{r coverage-by-income, echo=FALSE}
+if (exists("train_processed") && all(c("median_household_income","coverage_estimate") %in% names(train_processed))) {
+  train_processed <- train_processed %>% mutate(income_quartile = ntile(as.numeric(median_household_income), 4))
+  cov_by_income <- train_processed %>% group_by(income_quartile) %>% summarise(n = n(), mean_coverage = round(mean(coverage_estimate, na.rm = TRUE),3), sd_coverage = round(sd(coverage_estimate, na.rm = TRUE),3))
+} else {
+  cov_by_income <- tibble::tibble(income_quartile = integer(0), n = integer(0), mean_coverage = numeric(0), sd_coverage = numeric(0))
+}
+caption5 <- "Table 5: Mean MMR coverage and variability by county median income quartile."
+kable(cov_by_income, caption = caption5) %>% kable_styling(full_width = FALSE)
+```
+
+**Interpretation (Table 5):**  
+- If computed, the table shows whether mean coverage increases across income quartiles; use this to motivate stratified models or interaction terms.
+
+\newpage
+
+# Discussion and Next Steps
+
+```{r compute-inline-metrics, include=FALSE}
+# Compute numeric values to embed in Discussion safely
+mean_coverage <- if ("coverage_estimate" %in% names(analysis)) round(mean(as.numeric(analysis$coverage_estimate), na.rm = TRUE), 3) else NA_real_
+sd_coverage   <- if ("coverage_estimate" %in% names(analysis)) round(sd(as.numeric(analysis$coverage_estimate), na.rm = TRUE), 3) else NA_real_
+
+# Top predictor name and importance (if rf_varimp_tbl exists)
+if (exists("rf_varimp_tbl") && nrow(rf_varimp_tbl) > 0) {
+  top_predictor_name <- rf_varimp_tbl$variable[1]
+  top_predictor_importance <- round(rf_varimp_tbl$importance[1], 3)
+} else {
+  top_predictor_name <- NA_character_
+  top_predictor_importance <- NA_real_
+}
+
+# Correlation income-coverage (compute if possible)
+if (all(c("median_household_income","coverage_estimate") %in% names(analysis))) {
+  corr_income_cov <- round(cor(as.numeric(analysis$median_household_income), as.numeric(analysis$coverage_estimate), use = "pairwise.complete.obs"), 3)
+} else {
+  corr_income_cov <- NA_real_
+}
+```
+
+**Key takeaways**  
+- The county-level MMR coverage distribution has mean **`r mean_coverage`** percentage points with standard deviation **`r sd_coverage`** (see Table 1).  
+- The supervised baseline identifies top predictors via permutation importance (see Table 4). Top predictor (if computed): **`r ifelse(is.na(top_predictor_name), 'Not computed in this render', paste0(top_predictor_name, ' (', top_predictor_importance, ')'))`**.  
+- The Pearson correlation between median household income and coverage (if computed) is **`r ifelse(is.na(corr_income_cov), 'Not computed in this render', corr_income_cov)`**.
+
+**Planned modeling and validation steps**  
+1. Nested CV for model selection and tuning (elastic net, random forest, gradient boosting).  
+2. Permutation importance, partial dependence plots, and SHAP values for interpretability.  
+3. Sensitivity analyses: alternative imputation strategies, log-transform income, and exclusion of high-leverage counties.  
+4. Final evaluation on held-out test set with RMSE, R², calibration plots, and residual diagnostics.
+
+\newpage
+
+# Appendix
+
+## Codebook
+
+```{r codebook, echo=FALSE}
+codebook <- tibble::tribble(
+  ~variable, ~description,
+  "fips", "5-digit county FIPS code",
+  "coverage_estimate", "Estimated MMR completion (19-35 months)",
+  "pct_broadband_households", "Percent of households with broadband",
+  "median_household_income", "Median household income (USD)",
+  "count_bachelors_plus", "Count of adults with bachelor's degree or higher",
+  "delphi_vax_hesitancy", "Delphi/FB survey vaccine hesitancy estimate (mean)"
+)
+kable(codebook, caption = "Table 6: Codebook (key variables).") %>% kable_styling(full_width = FALSE)
+```
+
+### Session information 
+```{r session-info, echo=FALSE}
+# Print session info for reproducibility
+si <- capture.output(sessionInfo())
+cat(paste(si, collapse = "\n"))
+```
+
+**Reproducibility**  
+Repository: https://github.com/geobruder/Zeta_WG_Repo. Knit this Rmd from the project root. The fixed data path used in this report is `analysis_table.csv` at `data_clean/`.
+
+```

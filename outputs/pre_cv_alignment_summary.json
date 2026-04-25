@@ -1,0 +1,6 @@
+{
+  "original_rows": 1588,
+  "kept_rows": 1543,
+  "dropped_rows": 45,
+  "dropped_indices_file": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/dropped_rows_pre_cv_alignment.csv"
+}

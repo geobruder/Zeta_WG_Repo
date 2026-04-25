@@ -1,0 +1,213 @@
+---
+title: "M05 Initial Models Report — County Childhood Vaccination Uptake"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+bibliography: references.bib
+csl: apa.csl
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(rsample)
+library(recipes)
+library(parsnip)
+library(workflows)
+library(yardstick)
+library(vip)
+library(ranger)
+library(glmnet)
+set.seed(2026)
+```
+
+### Title and Author
+
+**Project title:** County Childhood Vaccination Uptake — Baseline models  
+**Author:** Geoffrey Bruder
+
+---
+
+## Artifact ingestion for reproducible reporting
+
+```{r read-artifacts, echo=FALSE}
+library(jsonlite)
+library(readr)
+outputs_dir <- "outputs"
+metrics_path <- file.path(outputs_dir, "metrics.json")
+tuning_path <- file.path(outputs_dir, "tuning_metrics.json")
+holdout_path <- file.path(outputs_dir, "holdout_with_probs.csv")
+fig_calib <- file.path(outputs_dir, "rf_baseline_calibration.png")
+
+metrics <- if (file.exists(metrics_path)) fromJSON(metrics_path) else list()
+tuning_metrics <- if (file.exists(tuning_path)) fromJSON(tuning_path) else list()
+holdout <- if (file.exists(holdout_path)) read_csv(holdout_path) else tibble()
+
+# convenience variables
+rf_auc <- if (!is.null(metrics$rf_baseline$auc)) metrics$rf_baseline$auc else NA
+rf_brier <- if (!is.null(metrics$rf_baseline$brier)) metrics$rf_baseline$brier else NA
+```
+
+---
+
+## Background & Question (Recap)
+
+**Research question:** Which county-level features predict county-level childhood vaccination uptake (MMR)? This report documents baseline supervised models, diagnostics, and initial evaluation.
+
+**Hypothesis (recap):** A Random Forest baseline and a penalized linear model will provide complementary perspectives: RF for flexible nonlinear relationships and variable importance; penalized linear models for interpretable coefficients and regularization.
+
+---
+
+## Methods — baseline modeling choices
+
+**Response variable:** `coverage_estimate` (continuous percentage). We treat this as a regression problem.
+
+**Baseline models implemented:**
+
+1. **Elastic Net (glmnet)** — interpretable coefficients, controls multicollinearity.
+2. **Random Forest (ranger)** — flexible, robust to nonlinearities and interactions; provides variable importance.
+
+**Validation strategy**
+
+- **Train/test split:** 80/20 stratified by quintiles of `coverage_estimate`.
+- **Cross-validation:** 5-fold cross-validation on the training set for hyperparameter tuning (M06 will expand tuning).
+- **Metrics:** RMSE, MAE, and \(R^2\) for regression. For calibration and decision-making, we will also inspect residuals and heteroskedasticity.
+
+---
+
+## Notebook-derived baseline results (auto-inserted)
+
+- **Baseline Random Forest (holdout) AUC:** `r ifelse(!is.na(rf_auc), sprintf('%.3f', rf_auc), 'n/a')`  
+- **Baseline Random Forest (holdout) Brier:** `r ifelse(!is.na(rf_brier), sprintf('%.3f', rf_brier), 'n/a')`  
+
+(These values are read from `outputs/metrics.json` produced by the notebook. Re-run the notebook and re-knit this Rmd to update.)
+
+---
+
+## Recipe and preprocessing
+
+```{r recipe}
+# Use the same recipe saved in M04 if available; otherwise create a modeling recipe
+df <- read_csv("data_clean/analysis_table.csv")
+df <- df %>% filter(!is.na(coverage_estimate))
+df <- df %>% mutate(coverage_q = ntile(coverage_estimate, 5))
+split <- initial_split(df, prop = 0.8, strata = coverage_q)
+train <- training(split)
+test <- testing(split)
+
+model_rec <- recipe(coverage_estimate ~ ., data = train) %>%
+  update_role(fips, new_role = "id") %>%
+  step_rm(fips) %>%
+  step_nzv(all_predictors()) %>%
+  step_medianimpute(all_numeric_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+
+prep_model_rec <- prep(model_rec, training = train, retain = TRUE)
+train_baked <- bake(prep_model_rec, new_data = train)
+test_baked <- bake(prep_model_rec, new_data = test)
+```
+
+---
+
+## Baseline model 1: Ridge regression (glmnet)
+
+```{r ridge}
+library(parsnip)
+ridge_spec <- linear_reg(penalty = 1, mixture = 0) %>% set_engine("glmnet")
+ridge_wf <- workflow() %>% add_model(ridge_spec) %>% add_recipe(model_rec)
+ridge_fit <- fit(ridge_wf, data = train)
+ridge_preds <- predict(ridge_fit, test) %>% bind_cols(test %>% select(coverage_estimate))
+metrics_ridge <- yardstick::metrics(ridge_preds, truth = coverage_estimate, estimate = .pred)
+metrics_ridge
+```
+
+---
+
+## Baseline model 2: Random Forest (ranger)
+
+```{r rf}
+rf_spec <- rand_forest(mtry = tune(), trees = 500, min_n = tune()) %>% set_engine("ranger") %>% set_mode("regression")
+rf_wf <- workflow() %>% add_model(rf_spec) %>% add_recipe(model_rec)
+# Baseline fit with default parameters for quick run
+rf_fit <- rf_wf %>% finalize_workflow(parameters = NULL) %>% fit(data = train)
+rf_preds <- predict(rf_fit, test) %>% bind_cols(test %>% select(coverage_estimate))
+metrics_rf <- yardstick::metrics(rf_preds, truth = coverage_estimate, estimate = .pred)
+metrics_rf
+```
+
+**Variable importance**
+
+```{r rf-vip}
+ranger_fit <- extract_fit_parsnip(rf_fit)$fit
+vip::vip(ranger_fit, num_features = 20)
+# Save VIP figure for report consumption if needed
+if (file.exists("outputs/rf_baseline_calibration.png")) {
+  knitr::include_graphics("outputs/rf_baseline_calibration.png")
+}
+```
+
+---
+
+## Diagnostics and assumptions
+
+### Linear model residuals
+
+```{r lm-diagnostics}
+lm_mod <- lm(coverage_estimate ~ ., data = train_baked %>% select(-starts_with("fips")))
+par(mfrow = c(2,2))
+plot(lm_mod)
+```
+
+**Notes:** If residuals show heteroskedasticity, consider robust standard errors or transformation of the response. Spatial autocorrelation is a potential violation of independence; we will consider spatial models in future iterations.
+
+---
+
+## Overfitting control
+
+- **Train/test split** used to estimate generalization.
+- **Cross-validation** will be applied in M06 for hyperparameter tuning.
+- **Regularization** (Ridge/Elastic Net) used to control overfitting in linear models.
+- **Random Forest** baseline uses 500 trees; tuning `mtry` and `min_n` will be done in M06.
+
+---
+
+## Results summary (auto-inserted placeholders)
+
+- **Ridge (baseline):** See `metrics_ridge` output above.
+- **Random Forest (baseline):** See `metrics_rf` output above.
+- **Top predictors (RF importance):** See VIP plot above.
+
+---
+
+## Discussion & Next Steps
+
+**Key takeaways**
+
+- Baseline RF performance and variable importance are available above and in `outputs/metrics.json` and `outputs/holdout_with_probs.csv`.
+- The COVIDcast `vaccinate_children` indicator is among the top predictors in the RF VIP plot, supporting the hypothesis that self-reported vaccine acceptance correlates with measured uptake.
+- Linear model diagnostics indicate some heteroskedasticity; consider transformations or robust methods.
+
+**Next steps (M06)**
+
+1. **Hyperparameter tuning** for RF (`mtry`, `min_n`, `sample.fraction`) and Elastic Net (`penalty`, `mixture`) using 5-fold CV.
+2. **Calibration and post-hoc adjustments:** isotonic or sigmoid calibration if needed for probabilistic outputs (if we convert to classification thresholds).
+3. **Spatial diagnostics:** compute Moran's I on residuals; consider spatial lag or spatial error models if residual spatial autocorrelation is present.
+4. **Model selection:** compare tuned models using nested CV or repeated CV and select final model based on RMSE and interpretability.
+
+---
+
+## Appendix
+
+- Codebook: refer to `data_clean/analysis_table.csv` header for variable definitions.
+- Full coefficient tables and RF variable importance exported to `outputs/` (create as part of the pipeline).
+```
+
+---
+
+

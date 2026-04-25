@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Geoffrey Bruder" />
+
+<meta name="date" content="2026-04-24" />
+
+<title>Baseline Models Report — County Childhood Vaccination Uptake</title>
+
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/header-attrs-2.28/header-attrs.js"></script>
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/navigation-1.1/tabsets.js"></script>
+<link href="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/highlightjs-9.12.0/highlight.js"></script>
+<link href="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/pagedtable-1.1/css/pagedtable.css" rel="stylesheet" />
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/pagedtable-1.1/js/pagedtable.js"></script>
+<script src="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/kePrint-0.0.1/kePrint.js"></script>
+<link href="M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG_files/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Baseline Models Report — County Childhood
+Vaccination Uptake</h1>
+<h4 class="author">Geoffrey Bruder</h4>
+<h4 class="date">April 24, 2026</h4>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#executive-summary" id="toc-executive-summary">Executive
+summary</a>
+<ul>
+<li><a href="#model-comparison-nested-cv-results"
+id="toc-model-comparison-nested-cv-results">Model comparison — nested CV
+results</a></li>
+<li><a href="#best-model-selection-and-artifact-check"
+id="toc-best-model-selection-and-artifact-check">Best model selection
+and artifact check</a></li>
+<li><a href="#training-vs-cv-performance-baseline-model"
+id="toc-training-vs-cv-performance-baseline-model">Training vs CV
+performance (baseline model)</a></li>
+<li><a href="#residual-diagnostics-for-the-selected-baseline"
+id="toc-residual-diagnostics-for-the-selected-baseline">Residual
+diagnostics for the selected baseline</a></li>
+<li><a href="#formal-assumptions-tests"
+id="toc-formal-assumptions-tests">Formal assumptions tests</a></li>
+<li><a href="#elasticnet-coefficients-and-interpretation"
+id="toc-elasticnet-coefficients-and-interpretation">ElasticNet
+coefficients and interpretation</a></li>
+<li><a href="#shap-directionality-partial-dependence-for-top-features"
+id="toc-shap-directionality-partial-dependence-for-top-features">SHAP
+directionality / partial dependence for top features</a></li>
+<li><a href="#overfitting-control-summary"
+id="toc-overfitting-control-summary">Overfitting control
+summary</a></li>
+<li><a href="#appendix-reproducibility-and-artifacts"
+id="toc-appendix-reproducibility-and-artifacts">Appendix:
+reproducibility and artifacts</a></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="executive-summary" class="section level1">
+<h1>Executive summary</h1>
+<p>This Baseline Models report summarizes initial model selection,
+nested CV results, residual diagnostics, formal assumptions tests, and
+interpretability outputs (coefficients and SHAP). The goal is to present
+baseline performance and evidence of overfitting control.</p>
+<div style="page-break-after: always;"></div>
+<div id="model-comparison-nested-cv-results" class="section level2">
+<h2>Model comparison — nested CV results</h2>
+<pre class="r"><code>if (!is.null(ms)) {
+  models &lt;- ms[names(ms) != &quot;run_info&quot;]
+  df_models &lt;- map_dfr(names(models), function(nm) {
+    v &lt;- models[[nm]]
+    tibble(
+      model = nm,
+      cv_rmse_mean = v$cv_rmse_mean %||% NA,
+      cv_rmse_std = v$cv_rmse_std %||% NA,
+      cv_mae_mean = v$cv_mae_mean %||% NA,
+      cv_r2_mean = v$cv_r2_mean %||% NA
+    )
+  })
+  df_models %&gt;%
+    arrange(cv_rmse_mean) %&gt;%
+    mutate(across(where(is.numeric), ~ round(.x, 3))) %&gt;%
+    kable(caption = &quot;Nested CV model comparison (lower RMSE better)&quot;) %&gt;%
+    kable_styling(full_width = FALSE)
+} else {
+  cat(&quot;models_summary.json not found in outputs/ — run nested CV cell first.\n&quot;)
+}</code></pre>
+<table class="table" style="color: black; width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+Nested CV model comparison (lower RMSE better)
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+model
+</th>
+<th style="text-align:right;">
+cv_rmse_mean
+</th>
+<th style="text-align:right;">
+cv_rmse_std
+</th>
+<th style="text-align:right;">
+cv_mae_mean
+</th>
+<th style="text-align:right;">
+cv_r2_mean
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+elasticnet
+</td>
+<td style="text-align:right;">
+4.074
+</td>
+<td style="text-align:right;">
+0.171
+</td>
+<td style="text-align:right;">
+2.887
+</td>
+<td style="text-align:right;">
+-0.001
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+random_forest
+</td>
+<td style="text-align:right;">
+4.085
+</td>
+<td style="text-align:right;">
+0.178
+</td>
+<td style="text-align:right;">
+2.890
+</td>
+<td style="text-align:right;">
+-0.006
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+gbm
+</td>
+<td style="text-align:right;">
+4.132
+</td>
+<td style="text-align:right;">
+0.168
+</td>
+<td style="text-align:right;">
+2.927
+</td>
+<td style="text-align:right;">
+-0.030
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+mlp_pytorch
+</td>
+<td style="text-align:right;">
+6.619
+</td>
+<td style="text-align:right;">
+1.510
+</td>
+<td style="text-align:right;">
+3.625
+</td>
+<td style="text-align:right;">
+-1.782
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>if (!is.null(ms)) {
+  df_plot &lt;- df_models %&gt;% arrange(cv_rmse_mean)
+  ggplot(df_plot, aes(x = reorder(model, cv_rmse_mean), y = cv_rmse_mean)) +
+    geom_col(fill = &quot;#2c7fb8&quot;, alpha = 0.9) +
+    geom_errorbar(aes(ymin = cv_rmse_mean - cv_rmse_std, ymax = cv_rmse_mean + cv_rmse_std), width = 0.2) +
+    coord_flip() +
+    labs(x = &quot;&quot;, y = &quot;CV RMSE (mean ± std)&quot;, caption = &quot;Nested CV results; lower RMSE indicates better predictive performance&quot;) +
+    theme_minimal(base_size = 11)
+} else {
+  cat(&quot;No model summary available to plot.\n&quot;)
+}</code></pre>
+<p><img src="M05-Baseline-Models-Report-%E2%80%94-County-Childhood-Vaccination-Uptake_BruderG_files/figure-html/model-rmse-plot-1.png" width="672" /></p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="best-model-selection-and-artifact-check"
+class="section level2">
+<h2>Best model selection and artifact check</h2>
+<pre class="r"><code>if (!is.null(ms)) {
+  df_models2 &lt;- df_models %&gt;% arrange(cv_rmse_mean)
+  best &lt;- df_models2$model[1]
+  cat(&quot;Best model by nested CV RMSE:&quot;, best, &quot;\n\n&quot;)
+  best_info &lt;- ms[[best]]
+  print(best_info$best_params_full %||% &quot;No best_params_full recorded&quot;)
+  manifest_path &lt;- path(outputs_dir, paste0(best, &quot;_artifact_manifest.json&quot;))
+  if (file_exists(manifest_path)) {
+    print(fromJSON(manifest_path))
+  } else {
+    cat(&quot;No artifact manifest found for&quot;, best, &quot;\n&quot;)
+  }
+} else {
+  cat(&quot;No models_summary.json found.\n&quot;)
+}</code></pre>
+<pre><code>## Best model by nested CV RMSE: elasticnet 
+## 
+## $alpha
+## [1] 0.965732
+## 
+## $l1_ratio
+## [1] 0.8083973
+## 
+## $model_artifact
+## [1] &quot;/Users/Main/Documents/GitHub/Zeta_WG_Repo/models/elasticnet_final.joblib&quot;
+## 
+## $preds_artifact
+## [1] &quot;/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/elasticnet_preds_full.csv&quot;
+## 
+## $model_checksum
+## [1] &quot;eb3d484623c1d90c010a510b8f68583f2bafd19e30870d3aa48576c50c40f9d1&quot;
+## 
+## $preds_checksum
+## [1] &quot;a3cd44211831d0ff13294e26ee51bab5faf1271af35d6ff2c3a55a1d93af0dc2&quot;
+## 
+## $timestamp
+## [1] &quot;2026-04-24T23:47:55Z&quot;</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="training-vs-cv-performance-baseline-model"
+class="section level2">
+<h2>Training vs CV performance (baseline model)</h2>
+<pre class="r"><code># The notebook writes a CSV &#39;training_vs_cv_metrics.csv&#39; with columns: model, train_rmse, cv_rmse_mean, cv_rmse_std
+metrics_path &lt;- path(outputs_dir, &quot;training_vs_cv_metrics.csv&quot;)
+if (file_exists(metrics_path)) {
+  read_csv(metrics_path, show_col_types = FALSE) %&gt;% mutate(across(where(is.numeric), ~ round(.x,3))) %&gt;% kable(caption=&quot;Training vs CV performance (baseline models)&quot;) %&gt;% kable_styling(full_width = FALSE)
+} else {
+  cat(&quot;training_vs_cv_metrics.csv not found. The notebook can produce this by refitting models on training folds and saving metrics.\n&quot;)
+}</code></pre>
+<pre><code>## training_vs_cv_metrics.csv not found. The notebook can produce this by refitting models on training folds and saving metrics.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="residual-diagnostics-for-the-selected-baseline"
+class="section level2">
+<h2>Residual diagnostics for the selected baseline</h2>
+<pre class="r"><code>if (!is.null(ms)) {
+  best &lt;- df_models %&gt;% arrange(cv_rmse_mean) %&gt;% slice(1) %&gt;% pull(model)
+  preds_path &lt;- path(outputs_dir, paste0(best, &quot;_preds_full.csv&quot;))
+  if (file_exists(preds_path)) {
+    preds &lt;- read_csv(preds_path, show_col_types = FALSE)
+    preds &lt;- preds %&gt;% mutate(resid = y_true - y_pred)
+    p1 &lt;- ggplot(preds, aes(x = y_pred, y = resid)) +
+      geom_point(alpha = 0.5) +
+      geom_hline(yintercept = 0, color = &quot;red&quot;, linetype = &quot;dashed&quot;) +
+      labs(x = &quot;Predicted&quot;, y = &quot;Residual&quot;, caption = glue(&quot;Residuals vs predicted for {best}&quot;)) +
+      theme_minimal(base_size = 11)
+    p2 &lt;- ggplot(preds, aes(x = resid)) + geom_histogram(bins=40, fill=&quot;#2b8cbe&quot;, color=&quot;white&quot;) + labs(x=&quot;Residual&quot;, y=&quot;Count&quot;, caption=&quot;Residual histogram&quot;) + theme_minimal(base_size=11)
+    print(p1); print(p2)
+  } else {
+    cat(&quot;Predictions file not found for&quot;, best, &quot;\n&quot;)
+  }
+} else {
+  cat(&quot;No models_summary.json found.\n&quot;)
+}</code></pre>
+<p><img src="M05-Baseline-Models-Report-%E2%80%94-County-Childhood-Vaccination-Uptake_BruderG_files/figure-html/residuals-1.png" width="672" /><img src="M05-Baseline-Models-Report-%E2%80%94-County-Childhood-Vaccination-Uptake_BruderG_files/figure-html/residuals-2.png" width="672" /></p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="formal-assumptions-tests" class="section level2">
+<h2>Formal assumptions tests</h2>
+<pre class="r"><code># These tests require the residuals for the best model; use preds_full CSV
+if (!is.null(ms)) {
+  best &lt;- df_models %&gt;% arrange(cv_rmse_mean) %&gt;% slice(1) %&gt;% pull(model)
+  preds_path &lt;- path(outputs_dir, paste0(best, &quot;_preds_full.csv&quot;))
+  if (file_exists(preds_path)) {
+    preds &lt;- read_csv(preds_path, show_col_types = FALSE) %&gt;% mutate(resid = y_true - y_pred)
+    # Shapiro-Wilk test for normality of residuals (note: sensitive for large N)
+    if (nrow(preds) &lt;= 5000) {
+      sh &lt;- shapiro.test(preds$resid)
+      cat(&quot;Shapiro-Wilk p-value:&quot;, round(sh$p.value,4), &quot;\n&quot;)
+      cat(&quot;Interpretation: p &lt; 0.05 suggests residuals deviate from normality; with large N, small deviations can be significant.\n&quot;)
+    } else {
+      cat(&quot;Shapiro-Wilk not run (n &gt; 5000). Use histogram and skew/kurtosis diagnostics instead.\n&quot;)
+      cat(&quot;Residual skew:&quot;, round(e1071::skewness(preds$resid, na.rm=TRUE),3), &quot;kurtosis:&quot;, round(e1071::kurtosis(preds$resid, na.rm=TRUE),3), &quot;\n&quot;)
+    }
+    # Breusch-Pagan test for heteroskedasticity
+    if (requireNamespace(&quot;lmtest&quot;, quietly=TRUE)) {
+      # fit a simple linear model of y_pred -&gt; y_true for BP test
+      lm_fit &lt;- lm(y_true ~ y_pred, data=preds)
+      bp &lt;- lmtest::bptest(lm_fit)
+      cat(&quot;Breusch-Pagan p-value:&quot;, round(bp$p.value,4), &quot;\n&quot;)
+      cat(&quot;Interpretation: p &lt; 0.05 indicates heteroskedasticity (non-constant variance).\n&quot;)
+    } else {
+      cat(&quot;Package &#39;lmtest&#39; not installed; cannot run Breusch-Pagan test.\n&quot;)
+    }
+    # Durbin-Watson: only applicable if residuals have temporal ordering; state applicability
+    cat(&quot;Durbin-Watson test: only applicable if data are time-ordered. If no time index exists, this test is not applicable.\n&quot;)
+  } else {
+    cat(&quot;Predictions file not found for&quot;, best, &quot;; cannot run formal residual tests.\n&quot;)
+  }
+} else {
+  cat(&quot;No models_summary.json found.\n&quot;)
+}</code></pre>
+<pre><code>## Shapiro-Wilk p-value: 0 
+## Interpretation: p &lt; 0.05 suggests residuals deviate from normality; with large N, small deviations can be significant.
+## Breusch-Pagan p-value: 0 
+## Interpretation: p &lt; 0.05 indicates heteroskedasticity (non-constant variance).
+## Durbin-Watson test: only applicable if data are time-ordered. If no time index exists, this test is not applicable.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="elasticnet-coefficients-and-interpretation"
+class="section level2">
+<h2>ElasticNet coefficients and interpretation</h2>
+<pre class="r"><code># The notebook exports ElasticNet coefficients to outputs/elasticnet_coefficients.csv
+coef_path &lt;- path(outputs_dir, &quot;elasticnet_coefficients.csv&quot;)
+if (file_exists(coef_path)) {
+  coefs &lt;- read_csv(coef_path, show_col_types = FALSE)
+  coefs %&gt;% arrange(desc(abs(coef))) %&gt;% mutate(coef = round(coef,4)) %&gt;% slice_head(n=10) %&gt;% kable(caption=&quot;Top 10 ElasticNet coefficients (by absolute value)&quot;) %&gt;% kable_styling(full_width = FALSE)
+  cat(&quot;Interpretation: positive coefficients increase predicted coverage; negative coefficients decrease predicted coverage, holding other features constant.\n&quot;)
+} else {
+  cat(&quot;ElasticNet coefficients file not found. The notebook can export coefficients to outputs/elasticnet_coefficients.csv.\n&quot;)
+}</code></pre>
+<pre><code>## ElasticNet coefficients file not found. The notebook can export coefficients to outputs/elasticnet_coefficients.csv.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="shap-directionality-partial-dependence-for-top-features"
+class="section level2">
+<h2>SHAP directionality / partial dependence for top features</h2>
+<pre class="r"><code>sv_path &lt;- path(outputs_dir, &quot;shap_values_random_forest_sample.csv&quot;)
+if (file_exists(sv_path)) {
+  sv &lt;- read_csv(sv_path, show_col_types = FALSE)
+  feat_cols &lt;- names(sv)[grepl(&#39;feat_&#39;, names(sv))]
+  ma &lt;- sv %&gt;% select(all_of(feat_cols)) %&gt;% summarise(across(everything(), ~ mean(abs(.x), na.rm=TRUE))) %&gt;% pivot_longer(everything(), names_to=&#39;feature&#39;, values_to=&#39;mean_abs_shap&#39;) %&gt;% arrange(desc(mean_abs_shap)) %&gt;% slice_head(n=3)
+  ma %&gt;% mutate(mean_abs_shap = round(mean_abs_shap, 4)) %&gt;% kable(caption = &quot;Top 3 features by mean absolute SHAP (sample)&quot;) %&gt;% kable_styling(full_width = FALSE)
+  cat(&quot;For each top feature, SHAP directionality plots are available in outputs/ if generated by the notebook. Use SHAP dependence plots to interpret directionality.\n&quot;)
+} else {
+  cat(&quot;Random forest SHAP CSV not found; skipping SHAP top features table.\n&quot;)
+}</code></pre>
+<pre><code>## For each top feature, SHAP directionality plots are available in outputs/ if generated by the notebook. Use SHAP dependence plots to interpret directionality.</code></pre>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="overfitting-control-summary" class="section level2">
+<h2>Overfitting control summary</h2>
+<ul>
+<li>Nested cross‑validation (outer 5‑fold, inner 3‑fold) was used to
+estimate generalization performance and tune hyperparameters.<br />
+</li>
+<li>Regularization: ElasticNet uses L1/L2 penalties; tuned
+<code>alpha</code> and <code>l1_ratio</code>.<br />
+</li>
+<li>Tree constraints: <code>max_depth</code> and
+<code>max_features</code> were included in search spaces to limit
+overfitting.<br />
+</li>
+<li>MLP: early stopping / patience implemented in the PyTorch wrapper to
+avoid overfitting.<br />
+</li>
+<li>Next step: temporal holdout evaluation if time-indexed data is
+available.</li>
+</ul>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="appendix-reproducibility-and-artifacts" class="section level2">
+<h2>Appendix: reproducibility and artifacts</h2>
+<ul>
+<li>Model artifacts: <code>models/{model}_final.joblib</code><br />
+</li>
+<li>Predictions: <code>outputs/{model}_preds_full.csv</code><br />
+</li>
+<li>Coefficients: <code>outputs/elasticnet_coefficients.csv</code><br />
+</li>
+<li>Training vs CV metrics:
+<code>outputs/training_vs_cv_metrics.csv</code><br />
+</li>
+<li>SHAP CSVs: <code>outputs/shap_values_*.csv</code><br />
+</li>
+<li>For PDF knitting: ensure <code>lmtest</code>, <code>e1071</code>,
+<code>kableExtra</code> installed. ```</li>
+</ul>
+<p><strong>Filename to save:</strong><br />
+<code>M05-Baseline-Models-Report-—-County-Childhood-Vaccination-Uptake_BruderG.Rmd</code>
+(exact)</p>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
