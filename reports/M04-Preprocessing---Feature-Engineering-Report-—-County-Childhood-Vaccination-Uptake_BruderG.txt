@@ -1,8 +1,12 @@
 ---
-title: "M04 Preprocessing and Feature Engineering Report — County Childhood Vaccination Uptake"
+title: "Preprocessing and Feature Engineering Report — County Childhood Vaccination Uptake"
 author: "Geoffrey Bruder"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    df_print: paged
   pdf_document:
     latex_engine: xelatex
     toc: true
@@ -219,4 +223,39 @@ if (file_exists(data_clean)) {
 - Numeric imputer: `models/simple_imputer_numeric_median.joblib`  
 - Audit files: `outputs/data_imputation_and_cleaning_summary.json`, `outputs/group_imputation_audit.json`, `outputs/dropped_rows_*.csv`  
 - For PDF knitting: ensure `xelatex` installed and R packages `rmarkdown`, `kableExtra`, `ggplot2`, `jsonlite`, `readr` available.
+
+```{r}
+# 1. Does the group audit file exist and what does it contain?
+ga <- if (file.exists("outputs/group_imputation_audit.json")) jsonlite::fromJSON("outputs/group_imputation_audit.json") else NULL
+str(ga)
+# print the filled_counts named vector or list
+if (!is.null(ga) && !is.null(ga$filled_counts)) print(ga$filled_counts) else cat("group_imputation_audit.json missing or no filled_counts\n")
+
+# 2. If state exists in analysis_table, show per-state filled counts for top numeric features
+if (file.exists("data_clean/analysis_table.csv")) {
+  df <- readr::read_csv("data_clean/analysis_table.csv", show_col_types = FALSE)
+  num_cols <- df %>% select(where(is.numeric)) %>% names()
+  top3 <- head(num_cols, 3)
+  cat("Top numeric features:", paste(top3, collapse=", "), "\n")
+  if ("state" %in% names(df)) {
+    per_state <- df %>% mutate(state = if_else(!is.na(state), state, substr(fips,1,2))) %>%
+      group_by(state) %>%
+      summarise(across(all_of(top3), ~ sum(is.na(.x)), .names = "nmiss_{col}")) %>%
+      arrange(desc(nmiss_{top3[1]}))
+    print(per_state)
+  } else {
+    cat("No state column present in analysis_table.csv\n")
+  }
+} else cat("analysis_table.csv not found\n")
+
+# 3. Quick sanity: are the filled counts nonzero?
+if (!is.null(ga) && length(ga$filled_counts)>0) {
+  fc <- unlist(ga$filled_counts)
+  summary(fc)
+  print(head(sort(fc, decreasing=TRUE), 10))
+} else cat("No filled_counts to inspect\n")
+
 ```
+
+
+---

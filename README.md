@@ -1,103 +1,301 @@
-**County Childhood Vaccination Uptake: Social Determinants, Broadband
-Access, and Internet Influence**
-### Preliminary Project Proposal
+# County Childhood Vaccination Uptake
 
-#### Team roles
+**Social Determinants, Broadband Access, and Internet Influence**  
+**Author:** Geoffrey Bruder  
+**Updated:** April 2026
 
-**Team Lead:** Geoffrey Bruder  
-**Recorder:** Geoffrey Bruder  
-**Spokesperson:** Geoffrey Bruder
+---
 
-#### Background and question
+## Project status — current, accurate snapshot
 
-**Research question:** What county‑level social determinants of health,
-broadband/internet access measures, and internet search activity predict
-lower childhood vaccination uptake, and which counties are most at risk
-of under‑vaccination?
+**Status:** Active / In progress — core ingestion, preprocessing, and modeling baseline completed; EDA was recently revisited as a focused grade-improvement task and is documented separately. The repository now contains reproducible ingestion and preprocessing code, imputation and group-imputation audits, preprocessor artifacts, an updated EDA report (R Markdown), and a working ElasticNet baseline with nested CV diagnostics. Spatial joins and advanced spatial modeling remain planned next steps.
 
-This project addresses a clear public‑health need: state and county
-health boards require actionable, county‑level risk profiles to
-prioritize outreach and resource allocation for childhood immunizations.
-Integrating SDOH, broadband availability, and internet search behavior
-produces a richer signal than SDOH alone and supports targeted
-interventions.
+> **Important:** the recent EDA revision was an aside to address course feedback and improve the grade; it does not represent a separate branch of the project — it is an updated component of the main project and the repository reflects the current, consolidated state.
 
-#### Stakeholder
+---
 
-**Primary stakeholder:** State Health Board (or county public‑health
-departments).  
-**Secondary stakeholders:** CDC regional offices; public‑health NGOs.
+## One‑line summary
 
-#### Hypothesis and prediction
+We build reproducible county‑level models to predict childhood vaccination coverage using CDC VaxView, ACS covariates, and optional COVIDcast survey signals; preprocessing artifacts, EDA, and an interpretable ElasticNet baseline are available in the repo.
 
-**Hypothesis:** County childhood vaccination rates are associated with
-structural SDOH (income, education, insurance), broadband availability,
-and local internet search interest in vaccine‑related misinformation.  
-**Prediction:** After adjusting for SDOH, counties with higher broadband
-access but elevated search interest in vaccine‑hesitancy keywords will
-show lower vaccination uptake than comparable counties with similar SDOH
-but lower misinformation search activity.
+---
 
-#### Data and sources
+## What has been completed (concrete)
 
-**Outcome (response):** County childhood vaccination coverage (e.g., MMR
-completion for children 19–35 months). Source: CDC VaxView / Socrata
-endpoints.  
-**Predictors (candidate):** - **Census ACS API:** median household
-income; educational attainment; % households with broadband
-subscription; race/ethnicity; population density.  
-- **AHRQ SDOH:** composite SDOH indicators by county.  
-- **FCC Broadband / BDC:** provider counts; served/unserved
-indicators.  
-- **Google Trends (pytrends):** relative search interest for
-vaccine‑related queries; rolling averages and lagged features.  
-- **Optional:** state immunization registry extracts or BRFSS for
-validation.
+- **Ingestion & provenance**
+  - Raw files ingested with robust FIPS padding and type coercion.
+  - Provenance recorded: `outputs/run_provenance.json` and `data_vintages.csv` (when available).
+- **Cleaned analysis table**
+  - `data_clean/analysis_table.csv` produced (merged CDC + ACS + optional COVIDcast).
+- **Preprocessing artifacts**
+  - `models/preprocessor.joblib` (ColumnTransformer pipeline).
+  - `models/simple_imputer_numeric_median.joblib`.
+  - Preprocessed arrays exported to `outputs/` for reproducibility.
+- **Imputation audits**
+  - `outputs/data_imputation_and_cleaning_summary.json` (global imputation audit).
+  - `outputs/group_imputation_audit.json` and `outputs/per_state_missing.csv` (per‑state missingness).
+- **Exploratory Data Analysis**
+  - Formal EDA report: `M03_EDA_Report.Rmd` (revised to address instructor feedback).
+  - EDA includes: target summary, predictor descriptive tables, correlogram, identification of strong correlations, bivariate plots with Pearson r, missingness diagnostics, and basic spatial checks (presence/absence of lat/lon or FIPS).
+- **Modeling baseline**
+  - Nested cross‑validation pipeline implemented.
+  - ElasticNet baseline trained and evaluated (CV RMSE ≈ 4.07).
+  - Model artifacts and summaries saved to `outputs/` (e.g., `models_summary.json`, `elasticnet_coefficients.csv`, `elasticnet_preds_full.csv` when generated).
+- **Notebooks**
+  - `notebooks/analysis_updated_full.ipynb` — ingestion, preprocessing, audits, and artifact exports. Run top→bottom to reproduce artifacts.
+- **Reproducibility**
+  - Scripts and notebooks save artifacts atomically and include checks; README and Rmd include instructions to re-run.
 
-**Join key:** county FIPS.
+---
 
-#### Tentative analysis plan
+## What changed since the original proposal
 
-**Preprocessing:** document vintages; align ACS 5‑yr structural features
-with monthly/annual vaccination and Trends data; impute missingness
-(MICE or state medians where appropriate); create codebook.  
-**Feature engineering:** broadband penetration (% households with
-broadband), provider density, SDOH composite indices, Google Trends
-rolling 3‑month average and 6‑month lag, interaction terms (broadband ×
-misinformation intensity).  
-**Unsupervised component:** PCA for dimensionality reduction of SDOH
-features; k‑means or hierarchical clustering to identify county
-typologies.  
-**Baseline model:** linear regression (continuous outcome) or logistic
-regression (binary threshold).  
-**Advanced models:** Random Forest; XGBoost/LightGBM; Elastic Net for
-interpretability.  
-**Validation:** 80/20 train/test split; 10‑fold cross‑validation for
-tuning; subgroup fairness checks.  
-**Metrics:** Regression — RMSE, MAE, $`R^2`$. Classification —
-Precision, Recall, F1, ROC‑AUC. Operational metric — <precision@k> for
-top‑risk counties.
+- Focused on robust ingestion and reproducible preprocessing rather than adding many external data sources immediately.
+- Implemented group (state) median imputation and produced an audit of what was filled per state.
+- Performed a targeted EDA revision to address course feedback: added code, concrete interpretations tied to our data, and basic spatial diagnostics.
+- Produced an interpretable ElasticNet baseline with nested CV and conformal-interval diagnostics (conformal outputs saved when available).
 
-#### Pitfalls and mitigations
+---
 
-- **Temporal misalignment:** ACS 5‑yr vs. monthly Trends. *Mitigation:*
-  use ACS for structural features; use rolling windows and lags for
-  Trends; document vintages.  
-- **Google Trends normalization:** relative values and sampling
-  variability. *Mitigation:* use consistent query lists, rolling
-  averages, multiple keywords, and sensitivity checks.  
-- **Small counts / suppression:** suppressed county counts.
-  *Mitigation:* aggregate where necessary; flag and report
-  uncertainty.  
-- **API quotas:** caching, backoff, and token use.
+## Repository layout (key files)
 
-#### Technical details
+```
+.
+├─ data_raw/                      # Place raw CDC, ACS, optional COVIDcast files here
+├─ data_clean/
+│  └─ analysis_table.csv          # merged, cleaned table used for EDA and modeling
+├─ notebooks/
+│  └─ analysis_updated_full.ipynb # ingestion, preprocessing, audits, artifact exports
+├─ models/
+│  ├─ preprocessor.joblib
+│  └─ simple_imputer_numeric_median.joblib
+├─ outputs/
+│  ├─ data_imputation_and_cleaning_summary.json
+│  ├─ group_imputation_audit.json
+│  ├─ per_state_missing.csv
+│  ├─ models_summary.json
+│  ├─ elasticnet_coefficients.csv
+│  └─ (figures, preds, CSV artifacts)
+├─ figures/                       # generated figures used by reports
+├─ M03_EDA_Report.Rmd             # Formal EDA report (revised)
+├─ M08_Final_Written_Deliverables.Rmd
+├─ README.md                      # (this file)
+└─ tests/                         # minimal tests (suggested)
+```
 
-**Language / stack:** Python (requests, pandas, geopandas, scikit‑learn,
-xgboost/lightgbm, shap, pytrends, folium).  
-**Reproducibility:** GitHub repo with README, data acquisition scripts,
-notebooks, and codebook.  
-**Resources:** Census API key; optional FCC account; compute for model
-tuning.
+---
 
-------------------------------------------------------------------------
+## How to reproduce the current artifacts (exact steps)
+
+1. **Activate environment**
+   - Example: `conda activate county-vax` (or the environment you use).
+2. **Place raw data**
+   - Put the CDC VaxView CSV and ACS CSV (and optional COVIDcast CSV) into `data_raw/`.
+   - Expected filenames (not strict; notebook will try to detect coverage column):  
+     - `cdc_vaxview_*.csv` (CDC coverage file)  
+     - `acs_2021_counties_merged_validated.csv`  
+     - optional `covidcast_*.csv`
+3. **Run ingestion & preprocessing**
+   - Open `notebooks/analysis_updated_full.ipynb` and run top→bottom. This will:
+     - Create `data_clean/analysis_table.csv`
+     - Save `models/preprocessor.joblib` and `models/simple_imputer_numeric_median.joblib`
+     - Write imputation audits to `outputs/`
+4. **Render the EDA report**
+   - From R (project root):  
+     ```r
+     rmarkdown::render("M03_EDA_Report.Rmd")
+     ```
+   - Or open `M03_EDA_Report.Rmd` in RStudio and Knit to PDF/HTML.
+5. **Run modeling cells**
+   - The notebook contains nested CV and model training cells; run them to regenerate `outputs/models_summary.json` and model artifacts.
+
+---
+
+## Key findings so far (data‑specific, concise)
+
+- **Target variability:** The target (`coverage_estimate`) has a standard deviation consistent with the ElasticNet baseline RMSE (~4.07), indicating baseline errors are on the same scale as observed variability.
+- **Missingness:** The optional survey signal `vaccinate_children` has substantial missingness in many counties; group (state) median imputation was applied and audited. Treat this predictor cautiously and run sensitivity checks.
+- **Collinearity:** The EDA identifies strong predictor pairs (|r| > 0.6) when present; these pairs are documented in the EDA and should be handled via regularization, variable selection, or dimensionality reduction.
+- **Population density:** If not present in the ACS extract, computing population density (population / land area) is a high-priority next step because it plausibly mediates access and spatial clustering.
+- **Spatial structure:** Basic checks are in place; formal spatial analysis (Moran’s I, LISA, hotspot mapping) is planned and prioritized.
+
+---
+
+## Remaining work and next steps (priority order)
+
+1. **Compute population density** for all counties and re-run EDA checks and bivariate analyses.  
+2. **Join county geometries** (TIGER/Line or equivalent) and compute Moran’s I and LISA; produce maps and hotspot analyses.  
+3. **Expand predictor set** to ~20–25 key variables and produce a compact VIF/collinearity report to guide modeling.  
+4. **Partial correlation and stratified analyses** for the strongest correlated pairs to assess confounding.  
+5. **Heteroskedastic-aware uncertainty quantification** (improve conformal intervals or model residual variance).  
+6. **Unit tests & CI** for ingestion and preprocessing; add minimal tests in `tests/`.  
+7. **Stakeholder deliverables:** one‑page county summaries and a short slide deck for public‑health partners.
+
+---
+
+## Notes about the EDA revision
+
+- The EDA was intentionally reworked to address instructor feedback: added code, concrete interpretations tied to our data, and spatial diagnostics. That revision was a focused effort to improve the course grade and to make the EDA formally suitable for stakeholders; it is integrated into the main project artifacts (Rmd + notebook + outputs).
+
+---
+
+## Data use and license
+
+All data sources are public (CDC, ACS, COVIDcast). Users must comply with each data source’s terms of use. This repository contains derived, aggregate county‑level data and code for research and educational purposes.
+
+---# County Childhood Vaccination Uptake
+
+**Social Determinants, Broadband Access, and Internet Influence**  
+**Author:** Geoffrey Bruder  
+**Updated:** April 2026
+
+---
+
+## Project status — current, accurate snapshot
+
+**Status:** Active / In progress — core ingestion, preprocessing, and modeling baseline completed; EDA was recently revisited as a focused grade-improvement task and is documented separately. The repository now contains reproducible ingestion and preprocessing code, imputation and group-imputation audits, preprocessor artifacts, an updated EDA report (R Markdown), and a working ElasticNet baseline with nested CV diagnostics. Spatial joins and advanced spatial modeling remain planned next steps.
+
+> **Important:** the recent EDA revision was an aside to address course feedback and improve the grade; it does not represent a separate branch of the project — it is an updated component of the main project and the repository reflects the current, consolidated state.
+
+---
+
+## One‑line summary
+
+We build reproducible county‑level models to predict childhood vaccination coverage using CDC VaxView, ACS covariates, and optional COVIDcast survey signals; preprocessing artifacts, EDA, and an interpretable ElasticNet baseline are available in the repo.
+
+---
+
+## What has been completed (concrete)
+
+- **Ingestion & provenance**
+  - Raw files ingested with robust FIPS padding and type coercion.
+  - Provenance recorded: `outputs/run_provenance.json` and `data_vintages.csv` (when available).
+- **Cleaned analysis table**
+  - `data_clean/analysis_table.csv` produced (merged CDC + ACS + optional COVIDcast).
+- **Preprocessing artifacts**
+  - `models/preprocessor.joblib` (ColumnTransformer pipeline).
+  - `models/simple_imputer_numeric_median.joblib`.
+  - Preprocessed arrays exported to `outputs/` for reproducibility.
+- **Imputation audits**
+  - `outputs/data_imputation_and_cleaning_summary.json` (global imputation audit).
+  - `outputs/group_imputation_audit.json` and `outputs/per_state_missing.csv` (per‑state missingness).
+- **Exploratory Data Analysis**
+  - Formal EDA report: `M03_EDA_Report.Rmd` (revised to address instructor feedback).
+  - EDA includes: target summary, predictor descriptive tables, correlogram, identification of strong correlations, bivariate plots with Pearson r, missingness diagnostics, and basic spatial checks (presence/absence of lat/lon or FIPS).
+- **Modeling baseline**
+  - Nested cross‑validation pipeline implemented.
+  - ElasticNet baseline trained and evaluated (CV RMSE ≈ 4.07).
+  - Model artifacts and summaries saved to `outputs/` (e.g., `models_summary.json`, `elasticnet_coefficients.csv`, `elasticnet_preds_full.csv` when generated).
+- **Notebooks**
+  - `notebooks/analysis_updated_full.ipynb` — ingestion, preprocessing, audits, and artifact exports. Run top→bottom to reproduce artifacts.
+- **Reproducibility**
+  - Scripts and notebooks save artifacts atomically and include checks; README and Rmd include instructions to re-run.
+
+---
+
+## What changed since the original proposal
+
+- Focused on robust ingestion and reproducible preprocessing rather than adding many external data sources immediately.
+- Implemented group (state) median imputation and produced an audit of what was filled per state.
+- Performed a targeted EDA revision to address course feedback: added code, concrete interpretations tied to our data, and basic spatial diagnostics.
+- Produced an interpretable ElasticNet baseline with nested CV and conformal-interval diagnostics (conformal outputs saved when available).
+
+---
+
+## Repository layout (key files)
+
+```
+.
+├─ data_raw/                      # Place raw CDC, ACS, optional COVIDcast files here
+├─ data_clean/
+│  └─ analysis_table.csv          # merged, cleaned table used for EDA and modeling
+├─ notebooks/
+│  └─ analysis_updated_full.ipynb # ingestion, preprocessing, audits, artifact exports
+├─ models/
+│  ├─ preprocessor.joblib
+│  └─ simple_imputer_numeric_median.joblib
+├─ outputs/
+│  ├─ data_imputation_and_cleaning_summary.json
+│  ├─ group_imputation_audit.json
+│  ├─ per_state_missing.csv
+│  ├─ models_summary.json
+│  ├─ elasticnet_coefficients.csv
+│  └─ (figures, preds, CSV artifacts)
+├─ figures/                       # generated figures used by reports
+├─ M03_EDA_Report.Rmd             # Formal EDA report (revised)
+├─ M08_Final_Written_Deliverables.Rmd
+├─ README.md                      # (this file)
+└─ tests/                         # minimal tests (suggested)
+```
+
+---
+
+## How to reproduce the current artifacts (exact steps)
+
+1. **Activate environment**
+   - Example: `conda activate county-vax` (or the environment you use).
+2. **Place raw data**
+   - Put the CDC VaxView CSV and ACS CSV (and optional COVIDcast CSV) into `data_raw/`.
+   - Expected filenames (not strict; notebook will try to detect coverage column):  
+     - `cdc_vaxview_*.csv` (CDC coverage file)  
+     - `acs_2021_counties_merged_validated.csv`  
+     - optional `covidcast_*.csv`
+3. **Run ingestion & preprocessing**
+   - Open `notebooks/analysis_updated_full.ipynb` and run top→bottom. This will:
+     - Create `data_clean/analysis_table.csv`
+     - Save `models/preprocessor.joblib` and `models/simple_imputer_numeric_median.joblib`
+     - Write imputation audits to `outputs/`
+4. **Render the EDA report**
+   - From R (project root):  
+     ```r
+     rmarkdown::render("M03_EDA_Report.Rmd")
+     ```
+   - Or open `M03_EDA_Report.Rmd` in RStudio and Knit to PDF/HTML.
+5. **Run modeling cells**
+   - The notebook contains nested CV and model training cells; run them to regenerate `outputs/models_summary.json` and model artifacts.
+
+---
+
+## Key findings so far (data‑specific, concise)
+
+- **Target variability:** The target (`coverage_estimate`) has a standard deviation consistent with the ElasticNet baseline RMSE (~4.07), indicating baseline errors are on the same scale as observed variability.
+- **Missingness:** The optional survey signal `vaccinate_children` has substantial missingness in many counties; group (state) median imputation was applied and audited. Treat this predictor cautiously and run sensitivity checks.
+- **Collinearity:** The EDA identifies strong predictor pairs (|r| > 0.6) when present; these pairs are documented in the EDA and should be handled via regularization, variable selection, or dimensionality reduction.
+- **Population density:** If not present in the ACS extract, computing population density (population / land area) is a high-priority next step because it plausibly mediates access and spatial clustering.
+- **Spatial structure:** Basic checks are in place; formal spatial analysis (Moran’s I, LISA, hotspot mapping) is planned and prioritized.
+
+---
+
+## Remaining work and next steps (priority order)
+
+1. **Compute population density** for all counties and re-run EDA checks and bivariate analyses.  
+2. **Join county geometries** (TIGER/Line or equivalent) and compute Moran’s I and LISA; produce maps and hotspot analyses.  
+3. **Expand predictor set** to ~20–25 key variables and produce a compact VIF/collinearity report to guide modeling.  
+4. **Partial correlation and stratified analyses** for the strongest correlated pairs to assess confounding.  
+5. **Heteroskedastic-aware uncertainty quantification** (improve conformal intervals or model residual variance).  
+6. **Unit tests & CI** for ingestion and preprocessing; add minimal tests in `tests/`.  
+7. **Stakeholder deliverables:** one‑page county summaries and a short slide deck for public‑health partners.
+
+---
+
+## Notes about the EDA revision
+
+- The EDA was intentionally reworked to address instructor feedback: added code, concrete interpretations tied to our data, and spatial diagnostics. That revision was a focused effort to improve the course grade and to make the EDA formally suitable for stakeholders; it is integrated into the main project artifacts (Rmd + notebook + outputs).
+
+---
+
+## Contact
+
+If you want me to run a specific diagnostic (compute Moran’s I, add population density, produce hotspot maps, or prepare a stakeholder one‑pager), open an issue in the repo or contact:
+
+**Geoffrey Bruder** — geoffrey.bruder@example.edu
+
+---
+
+## Data use and license
+
+All data sources are public (CDC, ACS, COVIDcast). Users must comply with each data source’s terms of use. This repository contains derived, aggregate county‑level data and code for research and educational purposes.
+
+---
+
+*This README reflects the current, implemented state of the project (April 2026). 

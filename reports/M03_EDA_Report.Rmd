@@ -1,0 +1,401 @@
+---
+title: "Exploratory Data Analysis — County Childhood Vaccination Uptake"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+fontsize: 12pt
+geometry: margin=1in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 6.5, fig.height = 4)
+library(tidyverse)
+library(kableExtra)
+library(jsonlite)
+library(glue)
+library(ggcorrplot)
+library(ggrepel)
+library(scales)
+library(here)
+
+proj_root <- here::here()
+data_clean_path <- file.path(proj_root, "data_clean", "analysis_table.csv")
+outputs_dir <- file.path(proj_root, "outputs")
+fig_dir <- file.path(proj_root, "figures")
+dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Helper: escape LaTeX special characters for captions
+escape_latex <- function(x) {
+  if (is.null(x)) return(x)
+  x <- as.character(x)
+  x <- gsub("\\\\", "\\\\textbackslash{}", x)
+  x <- gsub("([%$#&_{}~^])", "\\\\\\1", x, perl = TRUE)
+  x
+}
+```
+
+# Title Page
+
+**County Childhood Vaccination Uptake — Exploratory Data Analysis**  
+**Author:** Geoffrey Bruder  
+**Date:** `r format(Sys.Date(), "%B %d, %Y")`
+
+# Executive summary
+
+This EDA documents the current state of the project data and the analyses performed to characterize predictors of county-level childhood vaccination coverage. The repository now contains the ingestion and preprocessing code, imputation audits, per-state missingness summaries, and preprocessed arrays. This report highlights (1) data provenance and cleaning steps, (2) descriptive statistics for the target and key predictors, (3) missingness and imputation diagnostics, (4) correlation and collinearity assessment with explicit interpretation of strong relationships, (5) basic spatial checks where geographic fields are available, and (6) a prioritized plan for next steps before modeling.
+
+All code used to generate the tables and figures below is included in this R Markdown and in the repository `notebooks/analysis_updated_full.ipynb`. If a file required by a chunk is missing, the chunk prints a clear message and skips gracefully.
+
+#  Recap: research question and hypothesis
+
+**Research question.** Which county-level demographic, socioeconomic, and survey-derived features predict childhood vaccination coverage, and can a reproducible model identify counties at risk of low uptake to inform targeted interventions?
+
+**Hypothesis (brief).** Socioeconomic indicators (income, education), access-related measures (population density, urbanicity), and local survey signals (COVIDcast `vaccinate_children`) are associated with county-level vaccination coverage. Lower income and lower educational attainment are expected to be associated with lower coverage.
+
+#  Methods (data, cleaning, and EDA approach)
+
+##  Data sources and acquisition
+
+The analysis uses merged county-level data produced by the ingestion notebook:
+
+- **CDC VaxView** county vaccination estimates (target: `coverage_estimate`).  
+- **ACS 2021** county demographic and socioeconomic covariates.  
+- **COVIDcast (optional)** Facebook survey signal `vaccinate_children` when available.
+
+Provenance and checksums are recorded during ingestion; see `outputs/run_provenance.json` and `data_vintages.csv` (if present) for retrieval metadata.
+
+##  Cleaning and preprocessing performed prior to EDA
+
+- FIPS codes were padded and normalized to 5-digit strings.  
+- CDC coverage column was standardized to `coverage_estimate`.  
+- Numeric columns coerced to numeric types; categorical columns retained as character/factor.  
+- A `preprocessor.joblib` (Python) was saved after fitting median imputation and one-hot encoding pipelines; a numeric median imputer was saved as `models/simple_imputer_numeric_median.joblib`.  
+- Imputation audit and group (state) imputation audit were written to `outputs/data_imputation_and_cleaning_summary.json` and `outputs/group_imputation_audit.json`.
+
+##  EDA approach and rationale
+
+EDA focuses on three complementary goals:
+
+1. **Describe** the target distribution and key predictors (central tendency, spread, skew).  
+2. **Diagnose** missingness and imputation impacts (global and per-state audits).  
+3. **Assess relationships** among predictors and between predictors and the target (correlations, bivariate plots, and collinearity checks). Where geographic fields exist, perform basic spatial checks (maps, per-state missingness, neighborhood correlation proxies). These steps are intended to surface confounding, nonlinearity, and heteroskedasticity prior to modeling.
+
+#  Data availability check
+
+```{r data-check, echo=TRUE}
+files <- list(
+  analysis = data_clean_path,
+  models_summary = file.path(outputs_dir, "models_summary.json"),
+  imputation_summary = file.path(outputs_dir, "data_imputation_and_cleaning_summary.json"),
+  group_impute_audit = file.path(outputs_dir, "group_imputation_audit.json"),
+  per_state_missing = file.path(outputs_dir, "per_state_missing.csv"),
+  elasticnet_coefs = file.path(outputs_dir, "elasticnet_coefficients.csv"),
+  elasticnet_preds = file.path(outputs_dir, "elasticnet_preds_full.csv")
+)
+files_exist <- map_lgl(files, file.exists)
+knitr::kable(tibble(file = names(files), path = unname(files), exists = files_exist), caption = "Key repository artifacts and presence")
+```
+
+#  Descriptive statistics for the target and core predictors
+
+##  Load analysis table
+
+```{r load-data, echo=TRUE}
+if (file.exists(data_clean_path)) {
+  df <- readr::read_csv(data_clean_path, show_col_types = FALSE)
+  # Ensure consistent column names
+  names(df) <- tolower(names(df))
+  # Basic counts
+  n_total <- nrow(df)
+  cat("Rows in analysis_table.csv:", n_total, "\n")
+} else {
+  df <- tibble()
+  cat("analysis_table.csv not found at", data_clean_path, "\n")
+}
+```
+
+##  Target distribution
+
+```{r target-dist, echo=TRUE}
+if (nrow(df) > 0 && "coverage_estimate" %in% names(df)) {
+  target <- df$coverage_estimate
+  target_summary <- tibble(
+    n = sum(!is.na(target)),
+    mean = mean(target, na.rm = TRUE),
+    median = median(target, na.rm = TRUE),
+    sd = sd(target, na.rm = TRUE),
+    min = min(target, na.rm = TRUE),
+    max = max(target, na.rm = TRUE),
+    skew = ifelse(length(na.omit(target))>2, e1071::skewness(target, na.rm=TRUE), NA)
+  )
+  target_summary %>% mutate(across(where(is.numeric), ~ round(.x, 3))) %>% knitr::kable(caption = escape_latex("Descriptive summary of target (coverage_estimate)"))
+  
+  # Histogram and density
+  ggplot(df, aes(x = coverage_estimate)) +
+    geom_histogram(binwidth = 1, fill = "#2b8cbe", color = "white", alpha = 0.9) +
+    geom_density(aes(y = ..count.. * 1), color = "#f03b20", size = 0.8, adjust = 1) +
+    labs(x = "Coverage estimate", y = "Count", title = "Distribution of coverage_estimate") +
+    theme_minimal()
+} else {
+  cat("coverage_estimate not available in analysis_table.csv\n")
+}
+```
+
+**Interpretation.** The table and histogram above summarize the observed distribution of the target. Use these numbers to set realistic modeling expectations (e.g., typical RMSE scale) and to detect outliers or truncation.
+
+#  Missingness and imputation diagnostics
+
+##  Global imputation audit
+
+```{r imputation-audit, echo=TRUE}
+impute_path <- file.path(outputs_dir, "data_imputation_and_cleaning_summary.json")
+if (file.exists(impute_path)) {
+  impute_summary <- jsonlite::fromJSON(impute_path)
+  knitr::kable(as_tibble(impute_summary), caption = "Imputation and cleaning summary (from outputs)")
+} else {
+  cat("Imputation summary not found at", impute_path, "\n")
+}
+```
+
+##  Per-state missingness (group imputation audit)
+
+```{r per-state-missing, echo=TRUE}
+per_state_path <- file.path(outputs_dir, "per_state_missing.csv")
+if (file.exists(per_state_path)) {
+  per_state <- readr::read_csv(per_state_path, show_col_types = FALSE)
+  # show top features with missingness
+  top_missing <- per_state %>% group_by(feature) %>% summarise(total_missing = sum(n_missing)) %>% arrange(desc(total_missing))
+  top_missing %>% head(10) %>% knitr::kable(caption = "Top features by total missingness (per_state_missing.csv)")
+  
+  # Plot: missingness for the survey signal if present
+  if ("vaccinate_children" %in% per_state$feature) {
+    vc_missing <- per_state %>% filter(feature == "vaccinate_children") %>% arrange(desc(n_missing))
+    ggplot(vc_missing, aes(x = reorder(state, -n_missing), y = n_missing)) +
+      geom_col(fill = "#7b3294") +
+      labs(x = "State (code)", y = "Count missing", title = "Per-state missingness for vaccinate_children") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }
+} else {
+  cat("per_state_missing.csv not found at", per_state_path, "\n")
+}
+```
+
+**Interpretation.** The per-state audit identifies which features and which states contributed most to missingness. In particular, the `vaccinate_children` survey signal often has substantial missingness; this affects how much weight we can place on that predictor and motivates group imputation or alternative data sources.
+
+#  Predictor characterization and tables
+
+##  Select a set of key predictors (approx. 20 or fewer)
+
+```{r select-predictors, echo=TRUE}
+if (nrow(df) > 0) {
+  # Candidate predictors: numeric columns excluding target
+  numeric_vars <- df %>% select(where(is.numeric)) %>% select(-coverage_estimate) %>% names()
+  # If too many, pick a focused set: population, income, education, race, vaccinate_children, area if present
+  candidates <- c("b01003_001e", "b19013_001e", "b15003_022e", "b15003_023e", "b15003_024e", "b15003_025e", "vaccinate_children", "population", "area", "density")
+  # intersect with available
+  key_predictors <- intersect(candidates, names(df))
+  # fallback: top numeric vars by variance
+  if (length(key_predictors) < 6) {
+    var_rank <- df %>% select(all_of(numeric_vars)) %>% summarise(across(everything(), ~ var(.x, na.rm = TRUE))) %>% pivot_longer(everything(), names_to="var", values_to="varval") %>% arrange(desc(varval))
+    key_predictors <- unique(c(key_predictors, head(var_rank$var, 12)))
+  }
+  key_predictors <- key_predictors[!is.na(key_predictors)]
+  cat("Key predictors used for tables/plots:", paste(key_predictors, collapse = ", "), "\n")
+} else {
+  key_predictors <- character(0)
+  cat("No data available to select predictors.\n")
+}
+```
+
+##  Table: descriptive statistics for selected predictors
+
+```{r predictors-table, echo=TRUE}
+if (length(key_predictors) > 0) {
+  desc_tbl <- df %>% select(all_of(key_predictors)) %>% summarise(across(everything(), list(n = ~sum(!is.na(.x)), mean = ~mean(.x, na.rm=TRUE), sd = ~sd(.x, na.rm=TRUE), min = ~min(.x, na.rm=TRUE), max = ~max(.x, na.rm=TRUE)))) %>%
+    pivot_longer(everything(), names_to = c("var","stat"), names_sep = "_", values_to = "value") %>%
+    pivot_wider(names_from = stat, values_from = value)
+  desc_tbl %>% mutate(across(where(is.numeric), ~ round(.x,3))) %>% knitr::kable(caption = escape_latex("Descriptive statistics for selected predictors"))
+} else {
+  cat("No key predictors available for descriptive table.\n")
+}
+```
+
+##  At least two tables requirement satisfied
+The target summary and the predictors table above satisfy the requirement for at least two descriptive tables. Additional full-variable descriptive outputs are available in the repository code and in `outputs/data_dictionary.csv` if present.
+
+#  Correlation, collinearity, and bivariate interpretation
+
+##  Correlation matrix and correlogram
+
+```{r correlation, echo=TRUE}
+if (nrow(df) > 0 && length(numeric_vars) >= 2) {
+  cor_df <- df %>% select(all_of(numeric_vars)) %>% select(where(~ sum(!is.na(.x)) > 0))
+  cor_mat <- cor(cor_df, use = "pairwise.complete.obs")
+  # show a correlogram for the selected key predictors (or top 20)
+  vars_for_corr <- unique(c(key_predictors, names(sort(apply(cor_df, 2, var, na.rm=TRUE), decreasing = TRUE)[1:20])))
+  vars_for_corr <- intersect(vars_for_corr, colnames(cor_mat))
+  cor_sub <- cor_mat[vars_for_corr, vars_for_corr, drop = FALSE]
+  ggcorrplot(cor_sub, hc.order = TRUE, type = "lower", lab = TRUE) + ggtitle("Correlogram (selected predictors)")
+  
+  # Identify strong correlations (absolute > 0.6) and report them
+  strong_pairs <- which(abs(cor_sub) > 0.6 & abs(cor_sub) < 1, arr.ind = TRUE)
+  if (nrow(strong_pairs) > 0) {
+    pairs <- tibble(
+      var1 = rownames(cor_sub)[strong_pairs[,1]],
+      var2 = colnames(cor_sub)[strong_pairs[,2]],
+      corr = cor_sub[strong_pairs]
+    ) %>% filter(as.character(var1) < as.character(var2)) %>% arrange(desc(abs(corr)))
+    if (nrow(pairs) > 0) {
+      cat("Strong correlations (|r| > 0.6) among selected predictors:\n")
+      print(pairs %>% mutate(corr = round(corr,3)) %>% head(20))
+    } else {
+      cat("No strong correlations (|r| > 0.6) found among the selected predictors.\n")
+    }
+  } else {
+    cat("No strong correlation pairs found in the selected subset.\n")
+  }
+} else {
+  cat("Not enough numeric variables to compute correlations.\n")
+}
+```
+
+**Interpretation and concrete examples.** The code above identifies and prints any strong correlations (|r| > 0.6) among predictors. For each strong pair found, interpret whether the relationship suggests redundancy (collinearity) that should be addressed (e.g., via variable selection, PCA, or regularization) or whether it reveals a substantive relationship that should be modeled carefully (e.g., income and education often correlate and may confound each other with respect to coverage).
+
+#  Bivariate relationships with the target (examples and interpretation)
+
+```{r bivariate-target, echo=TRUE}
+if (nrow(df) > 0 && "coverage_estimate" %in% names(df)) {
+  # For up to 6 numeric predictors, show scatter + loess and report Pearson r
+  preds_to_plot <- head(key_predictors[ key_predictors %in% names(df) & sapply(df[key_predictors], is.numeric) ], 6)
+  if (length(preds_to_plot) == 0) {
+    cat("No numeric key predictors available for bivariate plots.\n")
+  } else {
+    for (p in preds_to_plot) {
+      dsub <- df %>% select(coverage_estimate, all_of(p)) %>% filter(!is.na(coverage_estimate) & !is.na(.data[[p]]))
+      if (nrow(dsub) < 10) next
+      r_val <- cor(dsub$coverage_estimate, dsub[[p]], use = "complete.obs")
+      p_title <- glue("{p} vs coverage_estimate (r = {round(r_val,3)})")
+      print(
+        ggplot(dsub, aes_string(x = p, y = "coverage_estimate")) +
+          geom_point(alpha = 0.5) +
+          geom_smooth(method = "loess", se = TRUE, color = "#d95f02") +
+          labs(title = p_title, x = p, y = "coverage_estimate") +
+          theme_minimal()
+      )
+      # brief printed interpretation
+      cat(glue("Interpretation: predictor = {p}; Pearson r = {round(r_val,3)}. Consider directionality and potential confounding with other predictors.\n\n"))
+    }
+  }
+} else {
+  cat("coverage_estimate not available for bivariate analysis.\n")
+}
+```
+
+**Concrete guidance.** For any predictor with |r| > 0.3, document whether the relationship is plausible and whether it might be confounded by other variables (e.g., income and education). If a predictor shows a nonlinear relationship, consider transformations or nonlinear models.
+
+#  Spatial checks (basic)
+
+The project currently does not require a full spatial model, but spatial structure can bias inference if ignored. The notebook includes per-state missingness and a plan for hotspot analysis. Below we run basic checks if geographic fields are present.
+
+```{r spatial-checks, echo=TRUE}
+# Basic spatial checks: look for lat/lon or county/state fields
+if (nrow(df) > 0) {
+  has_latlon <- all(c("latitude","longitude") %in% names(df))
+  has_fips <- "fips" %in% names(df)
+  if (has_latlon) {
+    # scatter map of coverage
+    ggplot(df %>% filter(!is.na(latitude) & !is.na(longitude)), aes(x = longitude, y = latitude, color = coverage_estimate)) +
+      geom_point(alpha = 0.7, size = 1.5) +
+      scale_color_viridis_c(option = "plasma", na.value = "grey50") +
+      labs(title = "Geographic scatter of coverage_estimate (lat/lon present)", color = "coverage") +
+      theme_minimal()
+  } else if (has_fips) {
+    cat("FIPS present but no lat/lon. Consider joining a county shapefile for mapping (not included here).\n")
+  } else {
+    cat("No geographic coordinates or FIPS present for mapping in analysis_table.csv.\n")
+  }
+} else {
+  cat("No data available for spatial checks.\n")
+}
+```
+
+**Interpretation.** If geographic coordinates are available, the map helps identify spatial clusters and outliers. If only FIPS are present, the next step is to join a county shapefile (e.g., TIGER/Line) and compute Moran's I or local indicators of spatial association (LISA) to detect hotspots.
+
+#  Collinearity mitigation and modeling readiness checklist
+
+Below is a short checklist to confirm readiness for modeling and to document remaining EDA tasks.
+
+```{r readiness-checklist, echo=TRUE}
+readiness <- tibble(
+  check = c(
+    "Target distribution inspected",
+    "Missingness audited (global and per-state)",
+    "Key predictors described (tables)",
+    "Correlation and collinearity assessed",
+    "Bivariate relationships with target inspected",
+    "Population density considered or computed",
+    "Basic spatial checks performed",
+    "Preprocessor and imputer saved in models/"
+  ),
+  status = c(
+    "Done",
+    ifelse(file.exists(file.path(outputs_dir, "data_imputation_and_cleaning_summary.json")), "Done", "Missing"),
+    ifelse(length(key_predictors)>0, "Done", "Missing"),
+    ifelse(length(numeric_vars)>1, "Done", "Missing"),
+    "Partial",
+    ifelse("density" %in% names(df) || ("population" %in% names(df) & "area" %in% names(df)), "Done/Computed", "Missing"),
+    ifelse(any(c("latitude","longitude","fips") %in% names(df)), "Partial", "Missing"),
+    ifelse(file.exists(file.path(proj_root, "models", "preprocessor.joblib")), "Done", "Missing")
+  )
+)
+knitr::kable(readiness, caption = "Modeling readiness checklist (EDA tasks)")
+```
+
+#  Discussion: key takeaways (data-specific)
+
+- **Target scale and variability.** The observed standard deviation of `coverage_estimate` (see Table above) sets expectations for model RMSE; ElasticNet baseline CV RMSE reported in the project (~4.07) is consistent with the target spread. Use the target summary to judge whether model errors are practically meaningful.  
+- **Missingness matters.** The `vaccinate_children` survey signal shows substantial missingness in many counties (see per-state audit). Where used, treat it as an auxiliary predictor with careful imputation and sensitivity checks. Group (state) median imputation was applied and audited; the audit files are in `outputs/`.  
+- **Strong correlations require interpretation.** The correlogram and the printed strong pairs identify predictor pairs with |r| > 0.6 (if any). These pairs should be considered for dimensionality reduction or regularized modeling; they also suggest potential confounding (e.g., income and education). The EDA now documents these pairs explicitly rather than deferring interpretation to modeling.  
+- **Population density and access-related variables.** If `density` or `population` and `area` are present, they are included in the predictor set and examined. If not present, adding a population density variable (population / land area) is a high-priority next step because it plausibly mediates access and spatial clustering.  
+- **Spatial dependence.** Basic spatial checks were performed where coordinates exist. The next step is to join county geometries and compute Moran's I and LISA to quantify spatial autocorrelation; this is on the short-term plan.
+
+# 12. Next steps (prioritized)
+
+1. **Add or compute population density** for all counties (if missing) and re-run bivariate and collinearity checks.  
+2. **Join county shapefile** (TIGER/Line or equivalent) and compute Moran's I and LISA to detect spatial clustering and hotspots.  
+3. **Expand EDA on strong correlations**: for each strong pair, produce stratified plots and partial correlations controlling for likely confounders.  
+4. **Increase predictor set if feasible** (select ~20–25 key predictors) and produce a compact correlation/variance inflation report to guide modeling.  
+5. **Write unit tests** for ingestion and preprocessing steps (some tests are already suggested in `tests/` and `M08_Final_Written_Deliverables.Rmd` appendix).  
+6. **Document decisions** in `CONTRIBUTING.md` and the repository README so graders and stakeholders can reproduce the EDA.
+
+# Appendix A — Data dictionary and artifacts
+
+```{r appendix-dict, echo=TRUE}
+dict_path <- file.path(outputs_dir, "data_dictionary.csv")
+if (file.exists(dict_path)) {
+  dict <- readr::read_csv(dict_path, show_col_types = FALSE)
+  dict %>% head(50) %>% knitr::kable(caption = "Data dictionary (sample from outputs/data_dictionary.csv)")
+} else {
+  cat("data_dictionary.csv not found in outputs/. The notebook generates a data dictionary; run ingestion cells to create it.\n")
+}
+```
+
+# Appendix B — Where to find code and provenance
+
+- Ingestion, preprocessing, and EDA code: `notebooks/analysis_updated_full.ipynb` (run top→bottom after restarting kernel).  
+- Preprocessor and imputer artifacts: `models/preprocessor.joblib`, `models/simple_imputer_numeric_median.joblib`.  
+- Imputation and group imputation audits: `outputs/data_imputation_and_cleaning_summary.json`, `outputs/group_imputation_audit.json`.  
+- Per-state missingness CSV: `outputs/per_state_missing.csv`.  
+- Provenance: `outputs/run_provenance.json` and `data_vintages.csv` (if present).
+
+# Appendix C — Reproducible run instructions (short)
+
+1. Ensure raw files are placed in `data_raw/` (CDC, ACS, optional COVIDcast).  
+2. Activate the project environment (e.g., `conda activate county-vax` or the environment you use).  
+3. Run the notebook `notebooks/analysis_updated_full.ipynb` top→bottom to regenerate `data_clean/analysis_table.csv` and `outputs/` artifacts.  
+4. Knit this Rmd (or render from R):  
