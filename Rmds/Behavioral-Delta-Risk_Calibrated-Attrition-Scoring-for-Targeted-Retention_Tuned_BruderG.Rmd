@@ -843,35 +843,56 @@ Table 16: Leakage audit (columns flagged and reasons). Table 17: Predictor audit
 # 17 Artifact Generation
 
 ```{r, echo=FALSE}
-## Save minimal artifacts for downstream reports
+## Robust artifact export for downstream reports
 artifacts_dir <- "artifacts"
 if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
 
-# Save single RData with multiple objects
-save_list <- c(
-  "pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob",
+proj_file <- file.path(artifacts_dir, "project_artifacts.RData")
+
+# Backup existing artifact file with timestamp to avoid accidental overwrite
+if(file.exists(proj_file)){
+  ts <- format(Sys.time(), "%Y%m%dT%H%M%S")
+  backup_file <- file.path(artifacts_dir, paste0("project_artifacts_backup_", ts, ".RData"))
+  file.copy(proj_file, backup_file, overwrite = TRUE)
+  message("Existing artifacts backed up to: ", backup_file)
+}
+
+# Define the canonical list of objects we prefer to save
+preferred_objects <- c(
   "test_baked",
-  "roc_base","roc_enh","roc_rf","roc_xgb",
-  "platt_pred","raw_probs","cal_plot",
-  "ci_tbl","pred_with_behav","pred_without_behav",
-  "rf_model","xgb_final"
+  "pred_base_prob", "pred_enh_prob",
+  "rf_pred_prob", "xgb_pred_prob",
+  "roc_base", "roc_enh", "roc_rf", "roc_xgb",
+  "platt_pred", "raw_probs", "cal_plot",
+  "ci_tbl", "pred_with_behav", "pred_without_behav",
+  "rf_model", "xgb_final"
 )
-# Keep only objects that exist to avoid errors
-save_list <- save_list[sapply(save_list, exists)]
-save(list = save_list, file = file.path(artifacts_dir, "project_artifacts.RData"))
 
-# Also save key single objects as .rds for selective loading
-if(exists("ci_tbl")) saveRDS(ci_tbl, file = file.path(artifacts_dir, "ci_tbl.rds"))
-if(exists("cal_plot")) saveRDS(cal_plot, file = file.path(artifacts_dir, "cal_plot.rds"))
-if(exists("xgb_pred_prob")) saveRDS(xgb_pred_prob, file = file.path(artifacts_dir, "xgb_pred_prob.rds"))
-```
+# Keep only objects that actually exist in the environment
+save_list <- preferred_objects[preferred_objects %in% ls(envir = .GlobalEnv)]
 
-```{r}
-# Example to add to tuned project Rmd (run once at end)
-artifacts_dir <- "artifacts"
-if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
-save(list = c("test_baked","pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob","roc_base","roc_enh","roc_rf","roc_xgb","platt_pred","raw_probs","cal_plot","ci_tbl","pred_with_behav","pred_without_behav"), file = file.path(artifacts_dir, "project_artifacts.RData"))
+# If nothing to save, warn and exit
+if(length(save_list) == 0){
+  message("No artifact objects found in the global environment. Nothing saved.")
+} else {
+  # Save the RData bundle
+  save(list = save_list, file = proj_file)
+  message("Saved artifacts to: ", proj_file)
 
+  # Also write selected objects as individual .rds files for selective loading
+  # Choose a small set of commonly used single-object fallbacks
+  single_rds <- c("ci_tbl", "cal_plot", "xgb_pred_prob", "rf_pred_prob", "test_baked")
+  single_rds <- single_rds[single_rds %in% save_list]
+
+  for(obj in single_rds){
+    tryCatch({
+      saveRDS(get(obj, envir = .GlobalEnv), file = file.path(artifacts_dir, paste0(obj, ".rds")))
+      message("Wrote ", obj, ".rds")
+    }, error = function(e){
+      message("Failed to write ", obj, ".rds : ", e$message)
+    })
+  }
+}
 ```
 
 

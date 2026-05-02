@@ -7,27 +7,36 @@ output:
     latex_engine: xelatex
     toc: true
     toc_depth: 2
-geometry: margin=1in
-fontsize: 12pt
 ---
 
+\newpage
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 6.5, fig.height = 4.5)
-library(tidyverse)
-library(knitr)
-library(kableExtra)
-library(recipes)
-library(caret)
-library(psych)
+# Load required libraries with graceful messages if missing
+required_pkgs <- c("tidyverse","knitr","kableExtra","recipes","caret","psych")
+missing_pkgs <- required_pkgs[!(required_pkgs %in% installed.packages()[,"Package"])]
+if(length(missing_pkgs) > 0){
+  message("Warning: the following packages are not installed: ", paste(missing_pkgs, collapse = ", "), ". The document will attempt to proceed but some outputs may fail.")
+}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(knitr)
+  library(kableExtra)
+  library(recipes)
+  library(caret)
+  library(psych)
+})
 set.seed(2026)
-# Load artifacts if available
+
+# Attempt to load artifacts saved by the tuned project Rmd
 artifacts_dir <- "artifacts"
 artifacts_file <- file.path(artifacts_dir, "project_artifacts.RData")
 if(file.exists(artifacts_file)){
   load(artifacts_file, envir = .GlobalEnv)
   message("Loaded project artifacts from: ", artifacts_file)
 } else {
+  # try rds fallbacks
   rds_try <- function(name){
     path <- file.path(artifacts_dir, paste0(name, ".rds"))
     if(file.exists(path)){
@@ -38,51 +47,64 @@ if(file.exists(artifacts_file)){
   }
   rds_try("test_baked")
   rds_try("ci_tbl")
-  message("project_artifacts.RData not found; attempted rds fallbacks.")
+  message("project_artifacts.RData not found; attempted rds fallbacks. If artifacts are missing, run the tuned project Rmd to produce them.")
+}
+
+# helper to escape LaTeX-sensitive characters in captions except we avoid underscores in captions entirely
+escape_caption <- function(s) {
+  s <- gsub("%", "\\\\%", s, fixed = TRUE)
+  s <- gsub("&", "\\\\&", s, fixed = TRUE)
+  s
+}
+
+# Small static checks to avoid LaTeX issues in captions and tables
+safe_kable <- function(df, caption = NULL, ...) {
+  if(!is.null(caption)) caption <- escape_caption(caption)
+  knitr::kable(df, caption = caption, format = "latex", escape = TRUE, ...) %>%
+    kable_styling(latex_options = c("hold_position"))
 }
 ```
 
-Title and front matter (kept as provided)
-
-Preprocessing & Feature Engineering Report
+# Preprocessing & Feature Engineering Report
 
 This report documents the preprocessing and feature engineering decisions made after exploratory analysis, including justifications grounded in the EDA results, the specific transformations applied, and the plan for supervised and unsupervised feature selection. The goal of preprocessing is to produce a reproducible, leakage‑free dataset suitable for hyperparameter tuning and final model evaluation while preserving interpretability for stakeholder decisioning.
 
-# Background and question
+## Background and question
 
 The modeling objective is to predict customer attrition using static demographic and credit features augmented by short‑term behavioral‑delta signals. The hypothesis is that delta features capturing recent declines in transaction amount, transaction count, and contact frequency will improve predictive performance and probability calibration. Preprocessing and feature engineering were designed to operationalize this hypothesis while controlling for overfitting and potential leakage.
 
-# Preprocessing plan and changes informed by EDA
+## Preprocessing plan and changes informed by EDA
 
-The original preprocessing plan called for median imputation, categorical consolidation, one‑hot encoding, zero‑variance removal, and numeric standardization. EDA confirmed the appropriateness of these choices and suggested refinements: medians were preferred over means for skewed continuous variables; rare categorical levels were consolidated into an Other or Unknown level when their frequency fell below a 1% threshold; and outliers in transaction amounts were winsorized at the 99th percentile for models sensitive to extreme values. I also added explicit checks to remove any columns that matched model‑derived patterns or identifiers as part of the leakage audit. These changes were implemented in a reproducible recipe so the same transformations apply to training, validation, and final scoring.
+The original preprocessing plan called for median imputation, categorical consolidation, one‑hot encoding, zero‑variance removal, and numeric standardization. EDA confirmed the appropriateness of these choices and suggested refinements: medians were preferred over means for skewed continuous variables; rare categorical levels were consolidated into an Other or Unknown level when their frequency fell below a 1 percent threshold; and outliers in transaction amounts were winsorized at the 99th percentile for models sensitive to extreme values. I also added explicit checks to remove any columns that matched model‑derived patterns or identifiers as part of the leakage audit. These changes were implemented in a reproducible recipe so the same transformations apply to training, validation, and final scoring.
 
-# Detailed preprocessing methods and rationale
+## Detailed preprocessing methods and rationale
 
 Numeric missingness was imputed with medians computed on the training partition to avoid information leakage. Categorical missingness was encoded as an explicit Unknown level to preserve information about missingness patterns. Rare factor levels were collapsed to Other to reduce dimensionality and to avoid sparse dummy variables that can destabilize models. Zero‑variance predictors were removed because they provide no information for supervised learning. Continuous predictors were standardized (mean zero, unit variance) when used with algorithms that are sensitive to scale; for tree‑based models standardization is not required but was applied consistently to maintain a single preprocessing pipeline. All preprocessing steps were implemented using a reproducible recipe so that the same transformations are applied to new data at scoring time.
 
-# Feature engineering methods and justification
+## Feature engineering methods and justification
 
 The primary engineered features are behavioral deltas and binary flags that capture recent negative changes. Amt_Chg_Q4Q1 and Ct_Chg_Q4Q1 measure relative change in transaction amount and transaction count between quarters; these were computed as (Q4 - Q1) / Q1 with careful handling of zero denominators. Large_Amt_Drop and Large_Ct_Drop are binary flags that indicate a relative drop below a 0.7 threshold; the threshold was chosen based on EDA quantiles and sensitivity checks that balanced prevalence and discriminative power. Recent_Contact_Reduction is a binary flag indicating low contact frequency (Contacts_Count_12_mon <= 1) and was motivated by the stratified summaries showing fewer contacts among attrited customers. I also created interaction candidates between utilization ratio and delta features to capture conditional effects where a drop in transactions may be more predictive for customers with high utilization.
 
-# Unsupervised and supervised feature selection strategy
+## Unsupervised and supervised feature selection strategy
 
 For unsupervised dimensionality reduction I evaluated principal component analysis on clusters of highly correlated numeric predictors identified in the correlogram. PCA was used only as an optional trajectory for models where interpretability is less critical; in practice I favored retaining interpretable features and using regularization or tree‑based ensembles to handle correlation. For supervised feature selection I planned a two‑stage approach: first, filter by univariate association with the target (AUC or point‑biserial correlation) to remove clearly uninformative predictors; second, use model‑based importance measures from Random Forest and XGBoost during cross‑validation to select a stable set of approximately 20–25 predictors. This supervised selection is implemented inside the training pipeline to avoid selection bias and to ensure that cross‑validation reflects the full selection process.
 
-# Handling of potential leakage and temporal considerations
+## Handling of potential leakage and temporal considerations
 
 A targeted leakage audit removed any columns that matched model‑derived patterns or identifiers. I also inspected engineered features for implicit future information (for example, features that could be computed only with knowledge of future events) and excluded any suspect variables. Because the dataset is cross‑sectional with quarter‑to‑quarter deltas, I flagged the need for temporal holdout validation before deployment; the preprocessing pipeline preserves time ordering so that a rolling origin or temporal holdout can be applied without reengineering features.
 
-# Results and justifications
+## Results and justifications
 
 All preprocessing steps are justified by EDA diagnostics. Median imputation and winsorization address skew and outliers identified in histograms and boxplots. Collapsing rare categorical levels reduces sparsity and was supported by frequency tables. The engineered delta features show meaningful separation in stratified summaries and contribute to improved AUC and Brier in ablation experiments reported in the tuning phase. The unsupervised PCA trajectory was evaluated but not used in the final candidate set because it reduced interpretability without clear performance gains relative to tree‑based ensembles that handle correlation natively.
 
-# Modeling plan and next steps
+## Modeling plan and next steps
 
-The modeling plan is to use the reproducible preprocessing recipe to produce a stratified 70/30 train/test split, to perform hyperparameter tuning with fivefold cross‑validation repeated five times optimizing ROC, and to evaluate final models on the held‑out test set with AUC and Brier score. Candidate algorithms include a static logistic baseline, an enhanced logistic with delta features, a tuned Random Forest (mtry grid, ntree = 500), and an XGBoost workflow that attempts caret’s xgbTree and falls back to direct xgboost::xgb.cv with early stopping when caret metrics are unavailable. Ablation experiments will retrain ensembles with and without behavioral features and use bootstrap resampling to produce confidence intervals for AUC and Brier deltas. Final calibration will use Platt scaling on the selected model and reliability diagrams to assess probability accuracy.
+The modeling plan is to use the reproducible preprocessing recipe to produce a stratified 70 30 train test split to perform hyperparameter tuning with fivefold cross‑validation repeated five times optimizing ROC and to evaluate final models on the held‑out test set with AUC and Brier score. Candidate algorithms include a static logistic baseline an enhanced logistic with delta features a tuned Random Forest (mtry grid ntree = 500) and an XGBoost workflow that attempts caret's xgbTree and falls back to direct xgboost::xgb.cv with early stopping when caret metrics are unavailable. Ablation experiments will retrain ensembles with and without behavioral features and use bootstrap resampling to produce confidence intervals for AUC and Brier deltas. Final calibration will use Platt scaling on the selected model and reliability diagrams to assess probability accuracy.
 
-# Appendix: codebook and preprocessing log
+\newpage
 
-The appendix below attempts to render the codebook and the preprocessing recipe (median imputation, rare level consolidation threshold, winsorization percentile, dummy encoding rules, zero‑variance removal, and standardization) from the available artifacts. If the artifacts are not present the code prints a clear diagnostic message.
+## Appendix A - Codebook / Data Dictionary - (test_baked)
+
 
 ```{r appendix-prep-load, echo=FALSE}
 # Check for test_baked and other artifacts
@@ -93,8 +115,6 @@ if(!exists("test_baked", envir = .GlobalEnv)){
 }
 ```
 
-## Appendix Table B1: Codebook / Data Dictionary (from test_baked)
-
 ```{r appendix-b1, echo=FALSE}
 if(exists("test_baked", envir = .GlobalEnv)){
   df <- get("test_baked", envir = .GlobalEnv)
@@ -103,61 +123,42 @@ if(exists("test_baked", envir = .GlobalEnv)){
     Type = sapply(df, function(x) class(x)[1]),
     Description = sapply(names(df), function(nm){
       # short heuristic descriptions for common names
-      if(nm == "target_attrit") return("Binary target: 1 = attrited, 0 = existing")
+      if(nm == "target_attrit") return("Binary target 1 = attrited 0 = existing")
       if(nm == "Total_Trans_Amt") return("Total transaction amount in period")
       if(nm == "Total_Trans_Ct") return("Total transaction count in period")
       if(nm == "Contacts_Count_12_mon") return("Number of contacts in last 12 months")
-      if(nm == "Avg_Utilization_Ratio") return("Average utilization ratio (balance/limit)")
-      if(nm == "Amt_Chg_Q4Q1") return("Engineered: relative change in transaction amount Q4 vs Q1")
-      if(nm == "Ct_Chg_Q4Q1") return("Engineered: relative change in transaction count Q4 vs Q1")
+      if(nm == "Avg_Utilization_Ratio") return("Average utilization ratio balance over limit")
+      if(nm == "Amt_Chg_Q4Q1") return("Engineered relative change in transaction amount Q4 vs Q1")
+      if(nm == "Ct_Chg_Q4Q1") return("Engineered relative change in transaction count Q4 vs Q1")
       return(NA_character_)
     })
   )
-  knitr::kable(codebook, caption = "Appendix Table B1. Codebook and data dictionary (derived from test_baked).", format = "latex") %>%
-    kable_styling(latex_options = c("hold_position"))
+  # Caption avoids underscores to prevent LaTeX issues
+  safe_kable(codebook, caption = "Appendix Table B1. Codebook and data dictionary derived from test baked.")
 } else {
   cat("Appendix Table B1 could not be rendered: test_baked not available.")
 }
 ```
 
-## Appendix B2: Preprocessing recipe (reproducible)
+## Appendix B: Preprocessing recipe (reproducible)
 
 ```{r appendix-b2, echo=FALSE}
 # Render a reproducible recipe snippet that was used (or would be used) for preprocessing
-recipe_text <- "
-# Preprocessing recipe (applied to training partition only)
-# 1. Remove identifier columns and any flagged leakage columns.
-# 2. Impute numeric missingness with median (computed on training set).
-# 3. Consolidate rare factor levels: levels with frequency < 1% -> 'Other' or 'Unknown'.
-# 4. Encode categorical predictors with one-hot/dummy encoding.
-# 5. Remove zero-variance predictors.
-# 6. Winsorize numeric outliers at 99th percentile for transaction amounts.
-# 7. Standardize numeric predictors (center = TRUE, scale = TRUE) for algorithms that require scaling.
-# 8. Save preprocessing recipe object for application to validation and scoring data.
-"
-cat(recipe_text)
+recipe_text <- c(
+  "# Preprocessing recipe (applied to training partition only)",
+  "1. Remove identifier columns and any flagged leakage columns.",
+  "2. Impute numeric missingness with median computed on the training set.",
+  "3. Consolidate rare factor levels: levels with frequency < 1% -> 'Other' or 'Unknown'.",
+  "4. Encode categorical predictors with one-hot/dummy encoding.",
+  "5. Remove zero-variance predictors.",
+  "6. Winsorize numeric outliers at the 99th percentile for transaction amounts.",
+  "7. Standardize numeric predictors (center = TRUE scale = TRUE) for algorithms that require scaling.",
+  "8. Save preprocessing recipe object for application to validation and scoring data."
+)
+cat(paste(recipe_text, collapse = "\n"))
 ```
 
-## Appendix: Saved artifacts log
 
-```{r appendix-artifacts-log, echo=FALSE}
-artifacts_dir <- "artifacts"
-if(dir.exists(artifacts_dir)){
-  files <- list.files(artifacts_dir)
-  if(length(files) > 0){
-    knitr::kable(tibble(File = files), caption = "Appendix. Files present in artifacts/ directory.", format = "latex") %>%
-      kable_styling(latex_options = c("hold_position"))
-  } else {
-    cat("No files found in artifacts/ directory.")
-  }
-} else {
-  cat("artifacts/ directory not found. Run the tuned project Rmd to create artifacts/project_artifacts.RData.")
-}
-```
-
-# Repository and reproducibility
-
-All code used to produce the preprocessing recipe and feature engineering artifacts is included in the project R Markdown files in the repository. The preprocessing recipe and the artifact export are saved in the project folder to ensure that the hyperparameter tuning and stakeholder deliverables can be reproduced without re‑running the full training pipeline.
+Full Production code available in "Behavioral Delta Risk_Calibrated Attrition Scoring for Targeted Retention_PreTune_BruderG.Rmd" @ https://github.com/geobruder/Zeta_WG_Repo/Rmds
 
 ---
-
