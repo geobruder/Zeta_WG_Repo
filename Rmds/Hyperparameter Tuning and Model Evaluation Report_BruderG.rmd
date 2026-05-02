@@ -1,0 +1,246 @@
+---
+title: "Hyperparameter Tuning and Model Evaluation Report"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 6.5, fig.height = 4.5)
+library(tidyverse)
+library(caret)
+library(xgboost)
+library(randomForest)
+library(pROC)
+library(knitr)
+set.seed(2026)
+```
+
+\newpage
+
+## Background and research question
+
+The project asks whether recent behavioral‑change signals—specifically changes in transaction amount and transaction count and reductions in contact frequency—improve prediction of customer attrition relative to models that use only static demographic and credit features. My working hypothesis is that customers exhibiting recent negative behavioral changes are more likely to attrite and that models incorporating these delta features will show improved discrimination and useful calibration compared with a static‑feature baseline. The baseline analyses (logistic regression with and without behavioral deltas) and initial ensemble fits (random forest and XGBoost) were completed in a reproducible pipeline; this tuning report documents the hyperparameter search strategy, the evaluation protocol, the results observed in the current run, and the plan for final model selection and validation.
+
+
+## Methods
+
+I reproduced the baseline modeling pipeline end‑to‑end and focused tuning effort on two tunable, high‑capacity algorithms: random forest and XGBoost. The pipeline begins with deterministic data ingestion and a targeted leakage audit that removes model‑derived scores and direct identifiers while preserving an anonymized PseudoID for export; numeric fields are coerced and categorical missingness is consolidated to an explicit Unknown level. I engineered behavioral‑delta features (quarter‑to‑quarter relative changes in transaction amount and count and binary flags for large drops and contact reduction) and applied a reproducible recipe that imputes numeric values with medians, collapses rare factor levels, creates dummy variables, removes zero‑variance predictors, and normalizes numeric inputs. Modeling used a stratified 70/30 train/test split with all tuning confined to the training partition and factor levels for the outcome fixed to ensure caret compatibility. The baseline comparison included a static logistic model (demographics and credit metrics) and an enhanced logistic that adds the behavioral deltas; ensemble candidates comprised a tuned random forest (mtry grid, ntree = 500) and an XGBoost workflow that attempted caret’s xgbTree and fell back to direct xgboost::xgb.cv with early stopping when necessary. Hyperparameter selection used fivefold cross‑validation repeated five times optimizing two‑class ROC, and final evaluation reported holdout AUC, Brier score, decision‑threshold TP/FP tradeoffs, and calibration diagnostics (Platt scaling and reliability diagrams). Ablation experiments retrained ensembles with and without the behavioral features and used bootstrap resampling to produce confidence intervals for AUC and Brier deltas; minimal model artifacts (probability vectors, ROC objects, calibration outputs) were exported for downstream reporting and reproducibility.
+
+
+## Hyperparameter search design
+
+For random forest I tuned the number of variables sampled at each split (mtry) over a small, conservative grid of values chosen to reflect the predictor dimensionality after recipe baking. The grid used was mtry ∈ {3, 5, 7} with ntree fixed at 500 to stabilize ensemble variance. For XGBoost I attempted caret’s xgbTree workflow with a multi‑dimensional grid including nrounds ∈ {50, 100}, max_depth ∈ {3, 6}, eta ∈ {0.05, 0.10}, colsample_bytree ∈ {0.7, 0.8}, min_child_weight ∈ {1, 3}, and subsample ∈ {0.7, 0.8}. Because caret’s xgbTree produced missing ROC metrics in this environment, I implemented a robust fallback: direct xgboost cross‑validation using xgb.cv with the same parameter ranges and early stopping (early_stopping_rounds = 20) to select nrounds and the best parameter combination by test AUC. All xgboost CV runs used fivefold CV and maximized AUC.
+
+
+## Overfitting controls and leakage audit
+
+Overfitting controls included the held‑out test set reserved for final evaluation, repeated cross‑validation for tuning, conservative parameter grids to avoid extreme complexity, early stopping for XGBoost, and a targeted leakage audit that removed columns matching model‑derived or identifier patterns prior to modeling. The pipeline explicitly checks for suspicious predictors and excludes them; the audit removed Naive Bayes classifier outputs and the original client identifier from the modeling set. These steps were applied before any tuning to reduce the risk that hyperparameter selection capitalizes on leakage.
+
+
+## Results summary 
+
+The tuning runs produced the following high‑level outcomes on the held‑out test set. The enhanced logistic model that includes behavioral‑delta features improved AUC relative to the static logistic baseline (AUC 0.9148 vs 0.8724) and reduced Brier score (0.0739 vs 0.0941). The random forest tuned over the mtry grid achieved a cross‑validated ROC that was stable across repeats and produced a test AUC of approximately 0.9867 with a Brier score near 0.03417. The caret xgbTree workflow failed to produce valid ROC metrics in this environment, so the direct xgboost fallback was used; direct xgboost CV selected a final model that produced a test AUC of approximately 0.9927 and a Brier score near 0.02282. Platt scaling (logistic recalibration on the holdout) produced a small improvement in Brier score for the selected model (from 0.022817 to 0.022412) while preserving AUC.
+
+
+## Discussion and interpretation
+
+The artifacts above provide direct, interpretable evidence that (1) behavioral‑delta features add measurable predictive value beyond static features, (2) tuned ensembles substantially outperform logistic baselines on the current holdout, and (3) calibration via Platt scaling yields modest improvements in probability accuracy while preserving ranking. The bootstrap ablation CIs support the statistical robustness of the RF improvement from behavioral features; XGBoost shows a smaller but consistent directional benefit. These results justify a pilot scoring deployment using the calibrated ensemble, conditional on a final leakage re‑audit and temporal holdout validation.
+
+
+## Limitations and recommended next steps
+
+The exceptionally high ensemble AUCs require careful final checks for subtle leakage and temporal confounding. Reconcile the caret xgbTree behavior across environments so the same tuning workflow can be reproduced, and run a temporal holdout or rolling origin validation before production scoring. For further tuning, consider a randomized or Bayesian search for XGBoost over a wider range of learning rates and depths with early stopping, and evaluate penalized logistic regression (glmnet) as a simpler, interpretable comparator.
+
+
+## Conclusion
+
+Given the current evidence and the artifacts included above, the most defensible operational path is to retain behavioral‑delta features in the scoring pipeline and to prioritize XGBoost as the leading candidate for a pilot scoring deployment, subject to a final leakage re‑audit and temporal validation. The hyperparameter tuning performed to date demonstrates that conservative grids, repeated cross‑validation, and early stopping produce stable, high‑performing ensembles; the next deliverable should document the final tuned hyperparameters, a temporal holdout validation, calibration diagnostics, and a pilot A/B test plan that uses calibrated probabilities and the decision thresholds prepared in the baseline pipeline.
+
+## Appendix A - Key numeric results
+
+The enhanced logistic model achieved AUC = 0.9148 and Brier = 0.0739 on the holdout.
+The tuned random forest achieved test AUC ≈ 0.9867 and Brier ≈ 0.03417.
+The direct xgboost final model achieved test AUC ≈ 0.9927 and Brier ≈ 0.02282.
+Platt scaling on the selected model reduced Brier from 0.022817 to 0.022412 while preserving AUC.
+Bootstrap CIs for the RF ablation delta exclude zero for the AUC improvement.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+## Load saved artifacts produced by the tuned project Rmd
+artifacts_dir <- "artifacts"
+artifacts_file <- file.path(artifacts_dir, "project_artifacts.RData")
+
+if(file.exists(artifacts_file)){
+  load(artifacts_file, envir = .GlobalEnv)
+  message("Loaded project artifacts from: ", artifacts_file)
+} else {
+  # Try individual rds fallbacks
+  rds_try <- function(name){
+    path <- file.path(artifacts_dir, paste0(name, ".rds"))
+    if(file.exists(path)) {
+      assign(name, readRDS(path), envir = .GlobalEnv)
+      message("Loaded ", name, " from ", path)
+      TRUE
+    } else FALSE
+  }
+  # Attempt to load the most important single files
+  rds_try("ci_tbl")
+  rds_try("cal_plot")
+  rds_try("xgb_pred_prob")
+  message("project_artifacts.RData not found; attempted rds fallbacks. If artifacts are missing, run the tuned project Rmd to produce them.")
+}
+
+# Sanity checks (helpful diagnostics printed in the knitted log)
+required_probs <- c("pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob")
+for(p in required_probs){
+  if(!exists(p)) warning("Missing probability vector: ", p, ". The corresponding figure/table may not render.")
+}
+if(!exists("test_baked")) warning("Missing test_baked data frame. ROC and calibration plots require test_baked$target_attrit.")
+```
+
+
+## Appendix B - Model Comparison
+
+```{r table-model-comparison-insert, echo=FALSE}
+# Table: Model comparison on the test set (AUC and Brier)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+compute_metrics <- function(auc_name, brier_name, prob_name = NULL, truth_expr = "test_baked$target_attrit"){
+  if(exists(auc_name, envir = .GlobalEnv) && exists(brier_name, envir = .GlobalEnv)){
+    return(c(AUC = as.numeric(get(auc_name, envir = .GlobalEnv)), Brier = get(brier_name, envir = .GlobalEnv)))
+  }
+  if(!is.null(prob_name) && exists(prob_name, envir = .GlobalEnv) && exists("test_baked", envir = .GlobalEnv)){
+    probs <- get(prob_name, envir = .GlobalEnv)
+    truth <- eval(parse(text = truth_expr), envir = .GlobalEnv)
+    truth_num <- if(is.factor(truth)) ifelse(as.character(truth) %in% c("Yes","1","TRUE"), 1, 0) else truth
+    auc_val <- as.numeric(pROC::roc(truth_num, probs, quiet = TRUE)$auc)
+    brier_val <- mean((probs - truth_num)^2, na.rm = TRUE)
+    return(c(AUC = auc_val, Brier = brier_val))
+  }
+  return(c(AUC = NA_real_, Brier = NA_real_))
+}
+
+m_base <- compute_metrics("auc_base","brier_base","pred_base_prob")
+m_enh  <- compute_metrics("auc_enh","brier_enh","pred_enh_prob")
+m_rf   <- compute_metrics("auc_rf","brier_rf","rf_pred_prob")
+m_xgb  <- compute_metrics("auc_xgb","brier_xgb","xgb_pred_prob")
+
+tbl_comp <- tibble(
+  Model = c("Logit Baseline","Logit Enhanced","Random Forest","XGBoost"),
+  AUC = c(m_base["AUC"], m_enh["AUC"], m_rf["AUC"], m_xgb["AUC"]),
+  Brier = c(m_base["Brier"], m_enh["Brier"], m_rf["Brier"], m_xgb["Brier"])
+)
+
+if(all(!is.na(tbl_comp$AUC))){
+  knitr::kable(tbl_comp, caption = "Table 1. Model comparison on the test set: AUC and Brier score for candidate models.", format = "latex") %>%
+    kable_styling(latex_options = c("hold_position"))
+} else {
+  cat("Table 1 could not be fully rendered: some model metrics are missing. Partial table printed below.\n")
+  print(tbl_comp)
+}
+```
+
+Table 1. Model comparison on the test set: AUC and Brier score for candidate models. This table summarizes final holdout performance for the tuned ensembles and logistic baselines, enabling direct comparison of ranking and calibration across models. Stakeholder‑takeaway: tuned ensembles (Random Forest and XGBoost) substantially outperform logistic baselines on both AUC and Brier in the current run, with XGBoost achieving the highest AUC and lowest Brier.
+
+
+## Appendix C - ROC Overlay
+
+```{r roc-overlay-insert, echo=FALSE, fig.width=7, fig.height=5}
+# Figure: ROC overlay (test set)
+library(pROC)
+plot_new <- TRUE
+
+# Use existing roc objects if available
+if(all(c("roc_base","roc_enh","roc_rf","roc_xgb") %in% ls(envir = .GlobalEnv))){
+  plot(roc_base, col = "black", main = "Figure 2. ROC curves (test set)", legacy.axes = TRUE)
+  plot(roc_enh, add = TRUE, col = "blue")
+  plot(roc_rf, add = TRUE, col = "darkgreen")
+  plot(roc_xgb, add = TRUE, col = "red")
+  legend("bottomright", legend = c("Logit Baseline","Logit Enhanced","Random Forest","XGBoost"),
+         col = c("black","blue","darkgreen","red"), lwd = 2, cex = 0.8)
+  plot_new <- FALSE
+}
+
+# Fallback: compute ROC from stored probability vectors
+if(plot_new && exists("test_baked", envir = .GlobalEnv)){
+  truth <- get("test_baked", envir = .GlobalEnv)$target_attrit
+  truth_num <- if(is.factor(truth)) ifelse(as.character(truth) %in% c("Yes","1","TRUE"), 1, 0) else truth
+  probs_list <- list(
+    Logit_Baseline = if(exists("pred_base_prob", envir = .GlobalEnv)) get("pred_base_prob", envir = .GlobalEnv) else NULL,
+    Logit_Enhanced = if(exists("pred_enh_prob", envir = .GlobalEnv)) get("pred_enh_prob", envir = .GlobalEnv) else NULL,
+    Random_Forest  = if(exists("rf_pred_prob", envir = .GlobalEnv)) get("rf_pred_prob", envir = .GlobalEnv) else NULL,
+    XGBoost        = if(exists("xgb_pred_prob", envir = .GlobalEnv)) get("xgb_pred_prob", envir = .GlobalEnv) else NULL
+  )
+  probs_list <- probs_list[!sapply(probs_list, is.null)]
+  if(length(probs_list) == 0){
+    plot.new()
+    text(0.5,0.5,"Figure 2 could not be rendered: required ROC objects or probability vectors are missing.")
+  } else {
+    first <- TRUE
+    cols <- c("Logit_Baseline" = "black", "Logit_Enhanced" = "blue", "Random_Forest" = "darkgreen", "XGBoost" = "red")
+    for(nm in names(probs_list)){
+      r <- pROC::roc(truth_num, probs_list[[nm]], quiet = TRUE)
+      if(first){
+        plot(r, col = cols[nm], main = "Figure 2. ROC curves (test set)", legacy.axes = TRUE)
+        first <- FALSE
+      } else {
+        plot(r, add = TRUE, col = cols[nm])
+      }
+    }
+    legend("bottomright", legend = names(probs_list), col = cols[names(probs_list)], lwd = 2, cex = 0.8)
+  }
+} else if(plot_new){
+  plot.new()
+  text(0.5,0.5,"Figure 2 could not be rendered: required ROC objects or probability vectors are missing.")
+}
+```
+
+Figure 2. ROC curves (test set). The overlay compares sensitivity and specificity tradeoffs for each candidate model across thresholds; the visual ordering of curves corresponds to the AUC ranking reported in the tables. Stakeholder‑takeaway: XGBoost and Random Forest dominate the logistic models across most thresholds, with XGBoost’s curve consistently above the others, supporting its selection as the leading candidate for a pilot scoring deployment.
+
+---
+
+##  Appendix D - Reliability Diagram
+
+```{r reliability-diagram-insert, echo=FALSE, fig.width=6.5, fig.height=4.5}
+# Figure: Reliability diagram for Platt calibrated selected model
+library(ggplot2)
+if(exists("cal_plot", envir = .GlobalEnv)){
+  ggplot(get("cal_plot", envir = .GlobalEnv), aes(x = mean_prob, y = obs)) +
+    geom_point(size = 2) + geom_line() + geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(x = "Mean predicted probability (Platt)", y = "Observed event rate", title = "Figure 3. Reliability diagram for Platt calibrated selected model") +
+    theme_minimal()
+} else if(exists("platt_pred", envir = .GlobalEnv) && exists("test_baked", envir = .GlobalEnv)){
+  raw_probs <- if(exists("raw_probs", envir = .GlobalEnv)) get("raw_probs", envir = .GlobalEnv) else if(exists("xgb_pred_prob", envir = .GlobalEnv)) get("xgb_pred_prob", envir = .GlobalEnv) else NULL
+  if(is.null(raw_probs)){
+    plot.new()
+    text(0.5,0.5,"Figure 3 could not be rendered: calibration objects are missing.")
+  } else {
+    cal_df_local <- tibble(raw = raw_probs, platt = get("platt_pred", envir = .GlobalEnv), truth = get("test_baked", envir = .GlobalEnv)$target_attrit) %>%
+      mutate(truth_num = ifelse(as.character(truth) %in% c("Yes","1","TRUE"), 1, 0),
+             bin = ntile(platt, 10)) %>%
+      group_by(bin) %>%
+      summarize(mean_prob = mean(platt), obs = mean(truth_num), n = n(), .groups = "drop")
+    ggplot(cal_df_local, aes(x = mean_prob, y = obs)) +
+      geom_point(size = 2) + geom_line() + geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+      labs(x = "Mean predicted probability (Platt)", y = "Observed event rate", title = "Figure 3. Reliability diagram for Platt calibrated selected model") +
+      theme_minimal()
+  }
+} else {
+  plot.new()
+  text(0.5,0.5,"Figure 3 could not be rendered: calibration objects are missing.")
+}
+```
+
+Figure 3. Reliability diagram for Platt calibrated selected model. The plot shows observed event rates against mean predicted probabilities in decile bins after Platt scaling; proximity to the 45° line indicates calibration quality. Stakeholder‑takeaway: the calibrated probabilities lie close to the identity line across most deciles, indicating acceptable calibration for operational thresholding; the highest decile slightly overestimates attrition, so extreme high‑probability cutoffs should be used with caution.
+
+---
