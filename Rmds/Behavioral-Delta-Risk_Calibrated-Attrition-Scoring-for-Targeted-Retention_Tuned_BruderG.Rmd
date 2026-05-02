@@ -840,6 +840,45 @@ Table 16: Leakage audit (columns flagged and reasons). Table 17: Predictor audit
 
 \newpage
 
+# 17 Artifact Generation
+
+```{r, echo=FALSE}
+## Save minimal artifacts for downstream reports
+artifacts_dir <- "artifacts"
+if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
+
+# Save single RData with multiple objects
+save_list <- c(
+  "pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob",
+  "test_baked",
+  "roc_base","roc_enh","roc_rf","roc_xgb",
+  "platt_pred","raw_probs","cal_plot",
+  "ci_tbl","pred_with_behav","pred_without_behav",
+  "rf_model","xgb_final"
+)
+# Keep only objects that exist to avoid errors
+save_list <- save_list[sapply(save_list, exists)]
+save(list = save_list, file = file.path(artifacts_dir, "project_artifacts.RData"))
+
+# Also save key single objects as .rds for selective loading
+if(exists("ci_tbl")) saveRDS(ci_tbl, file = file.path(artifacts_dir, "ci_tbl.rds"))
+if(exists("cal_plot")) saveRDS(cal_plot, file = file.path(artifacts_dir, "cal_plot.rds"))
+if(exists("xgb_pred_prob")) saveRDS(xgb_pred_prob, file = file.path(artifacts_dir, "xgb_pred_prob.rds"))
+```
+
+```{r}
+# Example to add to tuned project Rmd (run once at end)
+artifacts_dir <- "artifacts"
+if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
+save(list = c("test_baked","pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob","roc_base","roc_enh","roc_rf","roc_xgb","platt_pred","raw_probs","cal_plot","ci_tbl","pred_with_behav","pred_without_behav"), file = file.path(artifacts_dir, "project_artifacts.RData"))
+
+```
+
+
+\newpage
+
+
+
 # Conclusion
 
 This project evaluated whether recent behavioral‑change signals improve prediction of customer attrition relative to static demographic and credit features. Using a reproducible R pipeline, I trained and compared a static logistic baseline, an enhanced logistic that includes engineered behavioral‑delta features, a tuned random forest, and an XGBoost model. The enhanced logistic model produced a clear improvement over the static baseline (AUC +0.042; Brier reduction ≈ 0.020), and ensemble models—particularly XGBoost—achieved substantially higher discrimination on the holdout (XGBoost AUC ≈ 0.993) with modest calibration gains after Platt scaling. Ablation and bootstrap analyses show that behavioral deltas provide a statistically robust incremental contribution to Random Forest performance and a smaller but positive contribution to XGBoost. Permutation and repeated‑split stability checks indicate the models’ high performance is not an artifact of trivial leakage and is stable across resamples, though the exceptionally high ensemble AUCs justify a final leakage re‑audit and temporal validation prior to production deployment. Overall, the evidence supports including behavioral‑delta features in the scoring pipeline and proceeding to a pilot scoring and A/B test using calibrated probabilities and the decision thresholds documented above. Stakeholder‑takeaway: the calibrated XGBoost model, with behavioral deltas retained, is the strongest candidate for a pilot retention campaign and is expected to improve targeting effectiveness materially if validated on a temporal holdout or small operational pilot.

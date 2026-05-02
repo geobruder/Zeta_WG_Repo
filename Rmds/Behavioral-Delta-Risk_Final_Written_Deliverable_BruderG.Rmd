@@ -1042,6 +1042,14 @@ if(exists("xgb_pred_prob")) saveRDS(xgb_pred_prob, file = file.path(artifacts_di
 
 ```
 
+```{r}
+# Example to add to tuned project Rmd (run once at end)
+artifacts_dir <- "artifacts"
+if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
+save(list = c("test_baked","pred_base_prob","pred_enh_prob","rf_pred_prob","xgb_pred_prob","roc_base","roc_enh","roc_rf","roc_xgb","platt_pred","raw_probs","cal_plot","ci_tbl","pred_with_behav","pred_without_behav"), file = file.path(artifacts_dir, "project_artifacts.RData"))
+
+```
+
 
 \newpage
 
