@@ -1,7 +1,0 @@
-{
-  "model_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/models/random_forest_final.joblib",
-  "preds_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/random_forest_preds_full.csv",
-  "model_checksum": "3468c0290b956f5b7ac06d3e73baaef22d33cdad1a88d453d26fc829d8e81afc",
-  "preds_checksum": "2b101de4f40f5297816140875d15a2683363dca5e96969e056f025adac8605d4",
-  "timestamp": "2026-04-25T04:34:50Z"
-}

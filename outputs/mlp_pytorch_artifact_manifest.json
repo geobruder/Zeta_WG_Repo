@@ -1,7 +1,0 @@
-{
-  "model_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/models/mlp_pytorch_final.joblib",
-  "preds_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/mlp_pytorch_preds_full.csv",
-  "model_checksum": "6d29f74d9e994d1a0d5eee4ad24ab4a1d9ba2bc2df1e449c8de74776f8cab6e6",
-  "preds_checksum": "353508dcb4fcd154a28314614d20fd537b747393307889b699928e9d9689a2ca",
-  "timestamp": "2026-04-25T04:38:29Z"
-}

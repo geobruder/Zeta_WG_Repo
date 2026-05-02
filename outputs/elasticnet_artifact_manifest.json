@@ -1,7 +1,0 @@
-{
-  "model_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/models/elasticnet_final.joblib",
-  "preds_artifact": "/Users/Main/Documents/GitHub/Zeta_WG_Repo/outputs/elasticnet_preds_full.csv",
-  "model_checksum": "eb3d484623c1d90c010a510b8f68583f2bafd19e30870d3aa48576c50c40f9d1",
-  "preds_checksum": "a3cd44211831d0ff13294e26ee51bab5faf1271af35d6ff2c3a55a1d93af0dc2",
-  "timestamp": "2026-04-25T04:32:12Z"
-}
