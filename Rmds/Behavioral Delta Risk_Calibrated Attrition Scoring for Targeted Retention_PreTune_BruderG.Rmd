@@ -43,12 +43,19 @@ invisible(lapply(packages, library, character.only = TRUE))
 ```
 
 ```{r load-data}
-# Single dataset path (BankChurners.csv)
-data_path <- "BankChurners.csv"
+library(here)
 
-# Load dataset (stop with clear message if missing)
-if(!file.exists(data_path)) stop("File 'BankChurners.csv' not found in working directory. Place the CSV in the project folder or update data_path.")
+# resolve path relative to project root
+data_path <- here("data_raw", "BankChurners.csv")
+
+# clear, actionable error if missing
+if (!file.exists(data_path)) {
+  stop("data_raw/BankChurners.csv not found. Place BankChurners.csv in the project data_raw folder (", data_path, ").")
+}
+
+# read into the object your code expects
 customer_data <- read.csv(data_path, stringsAsFactors = FALSE)
+
 
 # Create PseudoID if not present
 if(!"PseudoID" %in% names(customer_data)){

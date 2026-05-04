@@ -1,0 +1,54 @@
+---
+title: "artifact_diagnostic"
+author: "Geoffrey Bruder"
+date: "2026-05-04"
+output: html_document
+---
+
+```{r}
+# 1. Does the artifacts file exist?
+file.exists("artifacts/project_artifacts.RData")
+
+# 2. What objects are inside it?
+env <- new.env()
+load("artifacts/project_artifacts.RData", envir = env)
+sort(ls(envir = env))
+
+# 3. Quick sanity checks on the main objects
+if(exists("test_baked", envir = env)) {
+  tb <- get("test_baked", envir = env)
+  dim(tb); names(tb)[1:30]
+  # check predicted probs length
+  if(exists("platt_pred", envir = env)) length(get("platt_pred", envir = env))
+  if(exists("xgb_pred_prob", envir = env)) length(get("xgb_pred_prob", envir = env))
+}
+
+```
+
+```{r}
+# 1. List objects inside artifacts
+env <- new.env()
+load("artifacts/project_artifacts.RData", envir = env)
+print(sort(ls(envir = env)))
+
+# 2. Confirm test_baked rows and predicted vector lengths
+tb <- get("test_baked", envir = env)
+cat("nrow(test_baked) =", nrow(tb), "\n")
+if(exists("platt_pred", envir = env)) cat("length(platt_pred) =", length(get("platt_pred", envir = env)), "\n")
+if(exists("xgb_pred_prob", envir = env)) cat("length(xgb_pred_prob) =", length(get("xgb_pred_prob", envir = env)), "\n")
+if(exists("raw_probs", envir = env)) cat("length(raw_probs) =", length(get("raw_probs", envir = env)), "\n")
+
+```
+
+
+```{r}
+
+
+```
+
+
+```{r}
+
+```
+
+

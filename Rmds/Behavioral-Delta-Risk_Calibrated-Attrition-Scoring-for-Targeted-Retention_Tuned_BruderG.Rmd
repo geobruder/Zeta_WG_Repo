@@ -12,9 +12,26 @@ editor_options:
     wrap: 72
 ---
 
+
+```{r setup_project_root, include=FALSE}
+# initialize here() and force knitting root to project root
+library(here)
+here::i_am("Rmds/Behavioral-Delta-Risk_Calibrated-Attrition-Scoring-for-Targeted-Retention_Tuned_BruderG.Rmd")   # path from project root to this Rmd
+knitr::opts_knit$set(root.dir = here::here())
+
+```
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 7, fig.height = 5)
 set.seed(2026)
+```
+
+```{r}
+getwd()                        # current working directory for this R session
+knitr::opts_knit$get("root.dir")  # knit root if it was set programmatically
+here::here()                   # what here() thinks is the project root (may require here)
+list.files(pattern = "\\.Rproj$", recursive = FALSE)  # Rproj files in current folder
+
 ```
 
 # Overview
@@ -36,13 +53,15 @@ invisible(lapply(packages, library, character.only = TRUE))
 ```
 
 ```{r load-data}
-data_path <- "BankChurners.csv"
-if(!file.exists(data_path)) stop("BankChurners.csv not found in working directory.")
+library(here)
+data_path <- here("data_raw", "BankChurners.csv")
+if(!file.exists(data_path)) stop("data_raw/BankChurners.csv not found. Put the CSV in the project data_raw folder.")
 raw <- read.csv(data_path, stringsAsFactors = FALSE)
 
 if(!"PseudoID" %in% names(raw)) raw <- raw %>% mutate(PseudoID = paste0("CUST", row_number()))
 initial_cols <- names(raw)
 message("Initial column count: ", length(initial_cols))
+
 ```
 
 \newpage
@@ -843,7 +862,7 @@ Table 16: Leakage audit (columns flagged and reasons). Table 17: Predictor audit
 # 17 Artifact Generation
 
 ```{r, echo=FALSE}
-## Robust artifact export for downstream reports
+# Artifact export for downstream reports
 artifacts_dir <- "artifacts"
 if(!dir.exists(artifacts_dir)) dir.create(artifacts_dir)
 
@@ -853,35 +872,88 @@ proj_file <- file.path(artifacts_dir, "project_artifacts.RData")
 if(file.exists(proj_file)){
   ts <- format(Sys.time(), "%Y%m%dT%H%M%S")
   backup_file <- file.path(artifacts_dir, paste0("project_artifacts_backup_", ts, ".RData"))
-  file.copy(proj_file, backup_file, overwrite = TRUE)
-  message("Existing artifacts backed up to: ", backup_file)
+  tryCatch({
+    file.copy(proj_file, backup_file, overwrite = TRUE)
+    message("Existing artifacts backed up to: ", backup_file)
+  }, error = function(e){
+    message("Failed to backup existing artifacts: ", e$message)
+  })
 }
 
-# Define the canonical list of objects we prefer to save
+# Define the canonical and preferred list of objects we prefer to save
 preferred_objects <- c(
+  # core baked data and preds
   "test_baked",
+  # various predicted vectors (keep all names that may be produced)
+  "platt_pred", "pred_prob", "raw_probs", "xgb_pred_prob", "rf_pred_prob",
   "pred_base_prob", "pred_enh_prob",
-  "rf_pred_prob", "xgb_pred_prob",
+  # model artifacts and diagnostics
+  "rf_model", "xgb_final",
   "roc_base", "roc_enh", "roc_rf", "roc_xgb",
-  "platt_pred", "raw_probs", "cal_plot",
-  "ci_tbl", "pred_with_behav", "pred_without_behav",
-  "rf_model", "xgb_final"
+  "cal_plot", "ci_tbl",
+  # ablation / comparison artifacts
+  "pred_with_behav", "pred_without_behav",
+  # variable importance / explainability
+  "top20_rf", "top20_xgb"
 )
 
 # Keep only objects that actually exist in the environment
-save_list <- preferred_objects[preferred_objects %in% ls(envir = .GlobalEnv)]
+existing_objects <- ls(envir = .GlobalEnv)
+save_list <- preferred_objects[preferred_objects %in% existing_objects]
 
-# If nothing to save, warn and exit
+# --- Canonicalize predicted probability vector and attach to test_baked if possible ---
+# Do not remove any existing objects; only add canonical names if we can safely create them.
+tryCatch({
+  # Determine canonical pred vector from available names in the global env
+  pred_vec <- NULL
+  if ("platt_pred" %in% existing_objects) pred_vec <- get("platt_pred", envir = .GlobalEnv)
+  if (is.null(pred_vec) && "pred_prob" %in% existing_objects) pred_vec <- get("pred_prob", envir = .GlobalEnv)
+  if (is.null(pred_vec) && "xgb_pred_prob" %in% existing_objects) pred_vec <- get("xgb_pred_prob", envir = .GlobalEnv)
+  if (is.null(pred_vec) && "raw_probs" %in% existing_objects) pred_vec <- get("raw_probs", envir = .GlobalEnv)
+  if (is.null(pred_vec) && "rf_pred_prob" %in% existing_objects) pred_vec <- get("rf_pred_prob", envir = .GlobalEnv)
+
+  # Attach canonical pred vector into test_baked if lengths align
+  if ("test_baked" %in% existing_objects && !is.null(pred_vec)) {
+    tb <- get("test_baked", envir = .GlobalEnv)
+    if (is.data.frame(tb) && length(pred_vec) == nrow(tb)) {
+      # create canonical columns without overwriting unrelated user columns
+      if (!"pred_prob" %in% names(tb)) tb$pred_prob <- pred_vec
+      # if pred_prob exists but is NA or different length, prefer the canonical vector
+      if ("pred_prob" %in% names(tb) && length(tb$pred_prob) == nrow(tb) && any(is.na(tb$pred_prob))) {
+        tb$pred_prob[is.na(tb$pred_prob)] <- pred_vec[is.na(tb$pred_prob)]
+      }
+      # ensure decile column
+      tb$pred_decile <- dplyr::ntile(tb$pred_prob, 10)
+      # assign back to global env and ensure canonical names are saved
+      assign("test_baked", tb, envir = .GlobalEnv)
+      assign("pred_prob", pred_vec, envir = .GlobalEnv)
+      # add to save list if not already present
+      save_list <- unique(c(save_list, "test_baked", "pred_prob"))
+      message("Attached canonical pred_prob and pred_decile to test_baked.")
+    } else {
+      message("Found test_baked but pred vector length does not match nrow(test_baked); skipping canonical attach.")
+    }
+  } else {
+    message("Either test_baked or a canonical pred vector is not present; skipping canonical attach.")
+  }
+}, error = function(e){
+  message("Canonicalization step failed: ", e$message)
+})
+
+# If nothing to save, warn and exit (but keep existing behavior of writing single .rds where possible)
 if(length(save_list) == 0){
-  message("No artifact objects found in the global environment. Nothing saved.")
+  message("No artifact objects found in the global environment. Nothing saved as RData.")
 } else {
-  # Save the RData bundle
-  save(list = save_list, file = proj_file)
-  message("Saved artifacts to: ", proj_file)
+  # Save the RData bundle with the union of preferred objects that exist now
+  tryCatch({
+    save(list = save_list, file = proj_file, envir = .GlobalEnv)
+    message("Saved artifacts to: ", proj_file)
+  }, error = function(e){
+    message("Failed to save project_artifacts.RData: ", e$message)
+  })
 
-  # Also write selected objects as individual .rds files for selective loading
-  # Choose a small set of commonly used single-object fallbacks
-  single_rds <- c("ci_tbl", "cal_plot", "xgb_pred_prob", "rf_pred_prob", "test_baked")
+  # Also write selected objects as individual .rds files for selective loading (keep previous single_rds behavior)
+  single_rds <- c("ci_tbl", "cal_plot", "xgb_pred_prob", "rf_pred_prob", "test_baked", "pred_prob")
   single_rds <- single_rds[single_rds %in% save_list]
 
   for(obj in single_rds){
@@ -894,6 +966,8 @@ if(length(save_list) == 0){
   }
 }
 ```
+
+
 
 
 \newpage

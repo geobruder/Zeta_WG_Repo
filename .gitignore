@@ -15,3 +15,4 @@ venv/
 *.ipynb
 # OS
 .DS_Store
+.Rproj.user

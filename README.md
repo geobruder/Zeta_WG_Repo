@@ -1,6 +1,30 @@
   Behavioral Delta Risk Calibrated Attrition Scoring for Targeted Retention
 
-## Background
+UPDATE 05/26
+
+# Behavioral Delta Risk — Presentation and Shiny Explorer
+
+This repository contains the tuned pipeline, stakeholder slides, and a local Shiny explorer for the
+Behavioral Delta Risk project. The app and slides read precomputed artifacts saved by the tuned R Markdown.
+
+## Quick overview of deliverables
+- `Rmds/Behavioral-Delta-Risk_Tuned_BruderG.Rmd` — tuned pipeline (run to regenerate artifacts).
+- `artifacts/project_artifacts.RData` — saved model artifacts and plotting objects used by slides and app.
+- `Rmds/slides_template.Rmd` → `outputs/BehavioralDelta_StakeholderSlides.html` — revealjs slide deck.
+- `shiny/app.R` — Shiny explorer (run locally; no deployment required -  deploy.R script framework for future deployment in shiny folder).
+- `artifacts/demo.mp4` — short demo video embedded in slides.
+
+## Prerequisites
+- R (>= 4.0) and RStudio recommended.
+- Install required packages once:
+```r
+install.packages(c(
+  "tidyverse","rmarkdown","revealjs","shiny","plotly","DT","pROC",
+  "caret","recipes","rsample","xgboost","randomForest","vip","fastshap"
+))
+
+
+## Project Background
 
 This project evaluates whether short term behavioral changes in customer activity improve prediction of attrition beyond static demographic and credit features. The practical goal is to provide a calibrated scoring model that the retention team can use to prioritize outreach and maximize retained lifetime value.
 
