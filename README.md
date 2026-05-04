@@ -17,12 +17,13 @@ Behavioral Delta Risk project. The app and slides read precomputed artifacts sav
 ## Prerequisites
 - R (>= 4.0) and RStudio recommended.
 - Install required packages once:
+"
 ```r
 install.packages(c(
   "tidyverse","rmarkdown","revealjs","shiny","plotly","DT","pROC",
   "caret","recipes","rsample","xgboost","randomForest","vip","fastshap"
 ))
-
+"
 
 ## Project Background
 
