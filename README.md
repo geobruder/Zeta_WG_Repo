@@ -14,17 +14,6 @@ Behavioral Delta Risk project. The app and slides read precomputed artifacts sav
 - `shiny/app.R` — Shiny explorer (run locally; no deployment required -  deploy.R script framework for future deployment in shiny folder).
 - `artifacts/demo.mp4` — short demo video embedded in slides.
 
-## Prerequisites
-- R (>= 4.0) and RStudio recommended.
-- Install required packages once:
-"
-```r
-install.packages(c(
-  "tidyverse","rmarkdown","revealjs","shiny","plotly","DT","pROC",
-  "caret","recipes","rsample","xgboost","randomForest","vip","fastshap"
-))
-"
-
 ## Project Background
 
 This project evaluates whether short term behavioral changes in customer activity improve prediction of attrition beyond static demographic and credit features. The practical goal is to provide a calibrated scoring model that the retention team can use to prioritize outreach and maximize retained lifetime value.
