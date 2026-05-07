@@ -3,7 +3,7 @@
 UPDATE 05/26  - Operational. 
 
 
-**Clone the repo at `<REPO_URL>`, ensure `artifacts/project_artifacts.RData` is in `artifacts/`, run the Shiny app (`shiny::runApp("shiny_app")` or open `app.R`), and explore the Threshold slider (set to 0.10), Decile filter (top decile), ROI preview, and customer drilldown with local explanations.**  
+**Clone the repo, ensure `artifacts/project_artifacts.RData` is in `artifacts/`, run the Shiny app (`shiny::runApp("shiny_app")` or open `app.R`), and explore the Threshold slider (set to 0.10), Decile filter (top decile), ROI preview, and customer drilldown with local explanations.**  
 **The app includes built‑in A/B test scaffolding and monitoring hooks (artifacted model versions, timestamped runs, and weekly AUC/decile drift metrics) to support a staged pilot and ongoing performance tracking.**  
 **A Tableau workbook (under construction) is also available in the repo for richer exploratory analysis and dashboarding of decile performance, cohort trends, and ROI scenarios; use it to supplement the live demo once finalized.**
 
