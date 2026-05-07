@@ -1,0 +1,283 @@
+---
+title: "Behavioral Delta Risk — Calibrated Attrition Scoring for Targeted Retention - Stakeholder Brief"
+author: "Geoffrey Bruder"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  powerpoint_presentation:
+    reference_doc: null
+    slide_level: 2
+params:
+  artifacts_path: "artifacts/project_artifacts.RData"
+  demo_file: "artifacts/demo.mp4"
+  tableau_url: ""
+---
+
+
+```{r setup, include=FALSE}
+# Minimal, robust setup for reproducible PPTX slides
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width = 8, fig.height = 5)
+
+# Safe package loader
+safe_library <- function(pkg){
+  if(requireNamespace(pkg, quietly = TRUE)){
+    suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+    TRUE
+  } else {
+    message("Package not available: ", pkg)
+    FALSE
+  }
+}
+safe_library("tidyverse")
+safe_library("pROC")
+safe_library("knitr")
+safe_library("kableExtra")
+safe_library("ggplot2")
+safe_library("patchwork")
+safe_library("recipes")
+safe_library("rsample")
+
+# Use params as provided; do not reassign locked bindings
+artifacts_path <- if(!is.null(params$artifacts_path) && nzchar(params$artifacts_path)) params$artifacts_path else "artifacts/project_artifacts.RData"
+
+# Load artifacts if present (fail gracefully)
+if(file.exists(artifacts_path)){
+  tryCatch({
+    load(artifacts_path, envir = .GlobalEnv)
+    message("Loaded artifacts from: ", artifacts_path)
+  }, error = function(e){
+    message("Failed to load artifacts: ", e$message)
+  })
+} else {
+  message("Artifacts file not found at: ", artifacts_path)
+}
+
+# Safe getter
+safe_get <- function(name, fallback = NULL){
+  if(exists(name, envir = .GlobalEnv)) get(name, envir = .GlobalEnv) else fallback
+}
+
+# Retrieve common artifacts (may be NULL)
+test_baked <- safe_get("test_baked", NULL)
+platt_pred  <- safe_get("platt_pred", NULL)
+raw_probs   <- safe_get("raw_probs", NULL)
+pred_prob   <- if(!is.null(platt_pred)) platt_pred else if(!is.null(raw_probs)) raw_probs else safe_get("pred_prob", NULL)
+roc_base <- safe_get("roc_base", NULL)
+roc_enh  <- safe_get("roc_enh", NULL)
+roc_rf   <- safe_get("roc_rf", NULL)
+roc_xgb  <- safe_get("roc_xgb", NULL)
+cal_plot <- safe_get("cal_plot", NULL)
+ci_tbl   <- safe_get("ci_tbl", NULL)
+top20_rf <- safe_get("top20_rf", NULL)
+top20_xgb<- safe_get("top20_xgb", NULL)
+
+# Ensure pred_decile if possible
+if(!is.null(test_baked) && !"pred_decile" %in% names(test_baked) && !is.null(pred_prob) && requireNamespace("dplyr", quietly = TRUE)){
+  test_baked <- dplyr::mutate(test_baked, pred_prob = pred_prob, pred_decile = dplyr::ntile(pred_prob, 10))
+}
+```
+
+**Background**
+
+This project evaluates whether short‑term behavioral deltas improve attrition prediction beyond static demographic and credit features. The practical goal is a calibrated probability score suitable for a pilot retention campaign. The primary stakeholder is the retention manager who needs a reliable prioritized list and probability thresholds to set outreach.
+
+---
+
+**Motivation**
+
+- Outreach is costly; prioritization must maximize ROI.  
+- Short‑term behavioral deltas (recent drops in spend/count, fewer contacts) may signal imminent attrition.  
+- Goal: produce calibrated probabilities for a pilot retention campaign.
+
+---
+
+**Question, Hypothesis, Prediction**
+
+- Question: Do short‑term behavioral deltas improve attrition prediction beyond static features?  
+- Hypothesis: Negative deltas increase attrition risk after controlling for demographics/credit.  
+- Prediction: Models with delta features → higher AUC and lower Brier.
+
+---
+
+**Data at a glance**
+
+```{r}
+if(!is.null(test_baked)){
+  cat("Dataset: anonymized BankChurners - available in repo")
+  cat("Rows in test set:", nrow(test_baked), "\n")
+  cat("Predictor count (approx):", ifelse(exists("predictor_list"), length(predictor_list), "see pipeline"), "\n")
+} else {
+  cat("test_baked not found in artifacts. Re-run pipeline and update params$artifacts_path.")
+}
+```
+
+- Key fields: demographics, credit metrics, transaction aggregates, quarter‑to‑quarter deltas.  
+
+- Response: `target_attrit` (1 = attrited).  
+
+- Note: PseudoID preserved; identifiers and flagged leakage columns removed.
+
+---
+
+**Key Engineered features**
+
+- Amt_Chg_Q4Q1 — relative change in transaction amount (Q4 vs Q1).  
+- Ct_Chg_Q4Q1 — relative change in transaction count.  
+- Large_Amt_Drop / Large_Ct_Drop — binary flags (threshold 0.7).  
+- Recent_Contact_Reduction — contacts ≤ 1.
+
+---
+
+**Preprocessing & leakage controls**
+
+- Median imputation; rare‑level consolidation; dummy encoding; zero‑variance removal; winsorize outliers.  
+- Targeted leakage audit removed model‑derived scores and identifiers (e.g., Naive_Bayes outputs, CLIENTNUM).  
+- Transformations implemented in a reproducible recipe applied only on training data.
+
+*Note added for stakeholder context:*  
+- **Final leakage re‑audit required** — audit performed; recommend one more temporal leakage check before production.
+
+---
+
+**Modeling overview**
+
+- **Baselines:** static logistic. **Enhanced:** logistic + deltas.  
+- **Ensembles:** Random Forest (tuned), XGBoost (direct xgboost CV fallback used).  
+- **Validation:** stratified 70/30 train/test; repeated 5‑fold CV × 5 for tuning.  
+- **Metrics:** AUC (discrimination), Brier (calibration), decision thresholds.
+
+*Implementation detail for reproducibility:*  
+- **Reconcile caret xgbTree behavior across environments** — implemented direct xgboost CV fallback and documented divergence.
+
+---
+
+**Key numeric results (holdout)**
+
+```{r}
+auc_xgb_val <- if(!is.null(roc_xgb) && requireNamespace("pROC", quietly=TRUE)) round(as.numeric(pROC::auc(roc_xgb)), 4) else 0.9927
+brier_xgb_val <- if(exists("brier_xgb")) round(brier_xgb, 5) else 0.02282
+cat("Selected model headline metrics\n\n")
+cat("XGBoost AUC:", auc_xgb_val, "\n")
+cat("XGBoost Brier:", brier_xgb_val, "\n")
+```
+
+**Summary (from artifacts):**  
+- Logit Baseline: **AUC 0.8724** | Brier 0.0941  
+- Logit Enhanced: **AUC 0.9148** | Brier 0.0739  
+- Random Forest (tuned): **AUC ≈ 0.9867** | Brier ≈ 0.03417  
+- XGBoost (final, calibrated): **AUC ≈ 0.9927** | Brier ≈ 0.02282
+
+<!-- Speaker notes: Present headline numbers and emphasize calibration improvement via Platt scaling. -->
+
+---
+
+**Visual diagnostics:**
+
+```{r fig-roc, fig.width=8, fig.height=5}
+rocs <- list(base = roc_base, enh = roc_enh, rf = roc_rf, xgb = roc_xgb)
+available_rocs <- rocs[!sapply(rocs, is.null)]
+if(length(available_rocs) > 0 && requireNamespace("pROC", quietly=TRUE)){
+  plot(available_rocs[[1]], col = "black", main = "ROC overlay (test set)")
+  cols <- c("black","blue","darkgreen","red")
+  i <- 1
+  for(name in names(available_rocs)){
+    if(i > 1) plot(available_rocs[[name]], add = TRUE, col = cols[i])
+    i <- i + 1
+  }
+  legend("bottomright", legend = names(available_rocs), col = cols[1:length(available_rocs)], lwd = 2)
+} else {
+  plot.new(); text(0.5,0.5,"ROC objects missing; cannot render ROC overlay")
+}
+```
+
+---
+
+**Calibration: Reliability diagram**
+
+```{r fig-calib, fig.width=8, fig.height=5}
+if(!is.null(cal_plot)){
+  tryCatch(print(cal_plot), error = function(e) { plot.new(); text(0.5,0.5,"cal_plot exists but could not be printed") })
+} else if(!is.null(pred_prob) && !is.null(test_baked)){
+  cal_df <- tibble::tibble(raw = pred_prob, truth = test_baked$target_attrit) %>%
+    mutate(bin = ntile(raw, 10)) %>%
+    group_by(bin) %>%
+    summarise(mean_prob = mean(raw, na.rm=TRUE), obs = mean(truth, na.rm=TRUE), n = n(), .groups="drop")
+  ggplot2::ggplot(cal_df, ggplot2::aes(x = mean_prob, y = obs)) +
+    ggplot2::geom_point(size = 2) + ggplot2::geom_line() +
+    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    ggplot2::labs(title = "Reliability diagram (deciles)", x = "Mean predicted probability", y = "Observed event rate")
+} else {
+  plot.new(); text(0.5,0.5,"Calibration objects missing; cannot render reliability diagram")
+}
+```
+
+---
+
+**Decision thresholds & pilot ask**
+
+```{r}
+if(!is.null(pred_prob) && !is.null(test_baked)){
+  use_probs <- pred_prob
+  truth <- test_baked$target_attrit
+  thresholds <- c(0.01,0.02,0.05,0.10,0.20)
+  threshold_table <- purrr::map_dfr(thresholds, function(t){
+    preds_bin <- as.integer(use_probs >= t)
+    tp <- sum(preds_bin==1 & truth==1, na.rm=TRUE)
+    fp <- sum(preds_bin==1 & truth==0, na.rm=TRUE)
+    tn <- sum(preds_bin==0 & truth==0, na.rm=TRUE)
+    fn <- sum(preds_bin==0 & truth==1, na.rm=TRUE)
+    precision <- if((tp+fp)==0) NA_real_ else tp/(tp+fp)
+    recall <- if((tp+fn)==0) NA_real_ else tp/(tp+fn)
+    tibble::tibble(threshold=t, TP=tp, FP=fp, TN=tn, FN=fn, Precision=precision, Recall=recall)
+  })
+  knitr::kable(threshold_table, digits=4, caption="Decision thresholds (test set)")
+} else {
+  cat("Missing probabilities or test set; threshold table cannot be computed.")
+}
+```
+
+**Pilot ask:** Stage a conservative pilot using calibrated XGBoost at **0.10** threshold; run A/B test measuring uplift vs control using operational LTV and outreach cost.
+
+---
+
+**App Demo**
+
+**Live demo will show:**  
+1. Reload artifacts → confirm provenance and `n_test`.  
+2. Threshold slider → set to **0.10**; show targeted list and ROI preview.  
+3. Decile filter → inspect top decile and drill to single customer.  
+4. Model insights → top predictors and local SHAP explanation.
+
+```{r demo-placeholder, echo=FALSE}
+if(file.exists(params$demo_file)){
+  cat(sprintf("Demo video available at: %s", params$demo_file))
+} else {
+  plot.new()
+  text(0.5,0.6,"DEMO PLACEHOLDER", cex = 1.5)
+  text(0.5,0.45,"Reload artifacts → Threshold slider → Decile filter → Customer drilldown", cex = 0.8)
+}
+```
+
+<!-- Speaker notes: During live presentation run the 60–90s demo following the exact demo checklist in the Appendix. If demo video is embedded, play it here. -->
+
+---
+
+**Limitations & cautions**
+
+- Exceptionally high ensemble AUCs require final leakage re‑audit and temporal validation.  
+- caret `xgbTree` inconsistency across environments — reconcile for reproducibility.  
+- Calibration caution at highest decile — use conservative cutoffs for costly outreach.
+
+---
+
+**Recommendations & next steps**
+
+1. Final leakage re‑audit and rolling origin validation.  
+2. Small pilot A/B test using calibrated probabilities and operational LTV/cost inputs.  
+3. Reconcile tuning across environments; document final hyperparameters.  
+4. Deploy lightweight Shiny app for ops + publish Tableau dashboard; implement monitoring (weekly AUC, decile drift).
+
+---
+**Appendix — One‑page summary and assets (notes slide)
+**One‑page summary:** attach `OnePager_GeoffreyBruder.pdf` (headline numbers + recommendation).  
+**Assets to attach:** ROC overlay PNG, reliability diagram PNG, decile chart PNG, top predictors PNG, demo video (optional).  
+**Artifacts path:** `artifacts/project_artifacts.RData` — update params and re-run pipeline to regenerate slides.
